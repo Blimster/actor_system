@@ -1,0 +1,11 @@
+name: actor_system
+description: An implementation of the actor model in Dart.
+version: 0.1.0
+author: Oliver Damm <oliver.damm@gmx.de>
+homepage: http://www.github.com/blimster/actor_system
+
+environment:
+  sdk: '>=2.4.0 <3.0.0'
+
+dev_dependencies:
+  test: ^1.6.8
