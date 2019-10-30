@@ -7,5 +7,8 @@ homepage: http://www.github.com/blimster/actor_system
 environment:
   sdk: '>=2.4.0 <3.0.0'
 
+dependencies:
+  uuid: ^2.0.0
+
 dev_dependencies:
   test: ^1.6.8

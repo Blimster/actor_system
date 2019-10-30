@@ -1,8 +1,8 @@
 import 'package:actor_system/actor_system.dart';
 
 void main() async {
-  final actorContext = ActorContext();
-  final actorRef = await actorContext.createActor(Uri.parse('test'), testActor);
+  final actorSystem = ActorSystem();
+  final actorRef = await actorSystem.createActor(Uri.parse('/test'), testActor);
   actorRef.send(FooMessage('foo', 1000));
   actorRef.send(BarMessage('bar'));
 }
