@@ -7,6 +7,6 @@ import 'package:uuid/uuid.dart';
 
 part 'src/actor.dart';
 
-part 'src/context.dart';
+part 'src/builder.dart';
 
 part 'src/system.dart';
