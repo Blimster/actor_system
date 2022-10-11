@@ -21,7 +21,7 @@ class TypeBasedMessageActorBuilder {
   final Map<Type, dynamic> _handlers = {};
 
   /// Adds a message handler for an explicit runtime type of a message. Subtypes
-  /// of the type will not by that handler.
+  /// of the type will not be handled by that handler.
   TypeBasedMessageActorBuilder handler<T>(TypeBasedMessageHandler<T> handler) {
     final messageType = _TypeOf<T>().get();
 
@@ -38,11 +38,9 @@ class TypeBasedMessageActorBuilder {
   Actor actor() {
     return (ActorContext context, Object? message) {
       final handler = _handlers[message.runtimeType];
-      if (handler == null) {
-        return null;
+      if (handler != null) {
+        return handler(context, message);
       }
-
-      return handler(context, message);
     };
   }
 }

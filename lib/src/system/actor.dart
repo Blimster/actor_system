@@ -20,11 +20,25 @@ class ActorContext {
   final Uri _path;
   final Map<Uri, ActorRef> _actorRefs;
   final Map<Uri, ActorFactory> _factories;
+  ActorRef? _current;
+  ActorRef? _replyTo;
 
   ActorContext._(this._path, this._actorRefs, this._factories);
 
   /// The path of the actor. Every actor in a system has an unique path.
   Uri get path => _path;
+
+  /// The current reference.
+  ActorRef get current {
+    final current = _current;
+    if (current != null) {
+      return current;
+    }
+    throw StateError('No current actor reference!');
+  }
+
+  /// The reference to the actor to reply to.
+  ActorRef? get replyTo => _replyTo;
 
   /// Registers an [ActorFactory] for the given [path]. The factory is used to
   /// create a new actor if a call to [ActorContext.createActor] has no factory
@@ -109,7 +123,7 @@ class ActorSystem extends ActorContext {
 class ActorRef {
   final Uri path;
   final int _maxMailBoxSize;
-  final Queue<Object?> _mailbox = Queue();
+  final Queue<Envelope> _mailbox = Queue();
   final ActorFactory _factory;
   final ActorContext _context;
   Actor _actor;
@@ -135,11 +149,11 @@ class ActorRef {
   /// thrown away and recreated using the factory provided
   /// when the actor was created. The messages in mailbox
   /// of the actor remain.
-  Future<void> send(Object? message) async {
+  Future<void> send(Object? message, {ActorRef? replyTo}) async {
     if (_mailbox.length >= _maxMailBoxSize) {
       throw Exception('mailbox is full! max size is $_maxMailBoxSize.');
     }
-    _mailbox.addLast(message);
+    _mailbox.addLast(Envelope(message, replyTo));
     _handleMessage();
 
     // message was added to mailbox
@@ -151,9 +165,10 @@ class ActorRef {
       if (!_isProcessing && _mailbox.isNotEmpty) {
         try {
           _isProcessing = true;
-          final message = _mailbox.removeFirst();
-
-          final result = _actor(_context, message);
+          final envelope = _mailbox.removeFirst();
+          _context._current = this;
+          _context._replyTo = envelope.replyTo;
+          final result = _actor(_context, envelope.message);
           if (result is Future) {
             await result;
           }
@@ -166,4 +181,11 @@ class ActorRef {
       }
     });
   }
+}
+
+class Envelope {
+  final Object? message;
+  final ActorRef? replyTo;
+
+  Envelope(this.message, this.replyTo);
 }
