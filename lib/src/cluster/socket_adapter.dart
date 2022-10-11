@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:actor_system/src/io/stream_reader.dart';
+import 'package:actor_system/src/cluster/stream_reader.dart';
 
 List<int> _serializeSize(int value) {
   final bytes = Uint8List(4);

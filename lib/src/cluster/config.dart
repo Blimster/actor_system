@@ -11,8 +11,15 @@ class ConfigNode {
 class Config {
   final List<ConfigNode> seedNodes;
   final ConfigNode localNode;
+  final int workers;
   final String secret;
   final String logLevel;
 
-  Config(this.seedNodes, this.localNode, this.secret, this.logLevel);
+  Config(
+    this.seedNodes,
+    this.localNode,
+    this.workers,
+    this.secret,
+    this.logLevel,
+  );
 }

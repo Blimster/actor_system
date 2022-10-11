@@ -1,12 +1,12 @@
 import 'package:actor_system/actor_system.dart';
 
 // actor factory
-Actor actorFactory(ActorContext context) {
+Actor actorFactory(Uri path) {
   // some actor state
   int calls = 0;
 
   // a message handler that handles all messages for that actor
-  return (Object message) {
+  return (ActorContext context, Object? message) {
     // count incoming messages
     calls++;
 
@@ -20,10 +20,10 @@ void main() async {
   final actorSystem = ActorSystem();
 
   // create 2 actors
-  final actorRef1 =
-      await actorSystem.createActor(Uri.parse('/test/1'), actorFactory);
-  final actorRef2 =
-      await actorSystem.createActor(Uri.parse('/test/2'), actorFactory);
+  final actorRef1 = await actorSystem.createActor(Uri.parse('/test/1'),
+      factory: actorFactory);
+  final actorRef2 = await actorSystem.createActor(Uri.parse('/test/2'),
+      factory: actorFactory);
 
   // send messages to the actors
   actorRef1.send("text");

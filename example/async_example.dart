@@ -1,7 +1,7 @@
 import 'package:actor_system/actor_system.dart';
 
-Actor actorFactory(ActorContext context) {
-  return (Object message) {
+Actor actorFactory(Uri path) {
+  return (ActorContext context, Object? message) {
     if (message is int) {
       print(message);
       // if a message of type [int] is processed, a [Future] is returned. the
@@ -17,7 +17,10 @@ Actor actorFactory(ActorContext context) {
 
 void main() async {
   final system = ActorSystem();
-  final actor = await system.createActor(Uri.parse('/test/1'), actorFactory);
+  final actor = await system.createActor(
+    Uri.parse('/test/1'),
+    factory: actorFactory,
+  );
   actor.send(1000);
   actor.send('string message');
 }

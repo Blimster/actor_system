@@ -2,9 +2,9 @@ seedNodes:
   - host: "localhost"
     port: 8001
     id: node1
-  - host: "localhost"
-    port: 8002
-    id: node2
+  # - host: "localhost"
+  #   port: 8002
+  #   id: node2
   # - host: "localhost"
   #   port: 8003
   #   id: node3
@@ -12,5 +12,6 @@ localNode:
   host: "localhost"
   port: 8001
   id: node1
+workers: 2
 secret: "s3cr3t"
 logLevel: "ALL"

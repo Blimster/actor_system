@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:actor_system/src/base/socket_extension.dart';
 import 'package:actor_system/src/base/string_extension.dart';
-import 'package:actor_system/src/io/socket_Adapter.dart';
-import 'package:actor_system/src/model/config.dart';
-import 'package:actor_system/src/model/handshake.dart';
+import 'package:actor_system/src/cluster/worker.dart';
+import 'package:actor_system/src/cluster/socket_Adapter.dart';
+import 'package:actor_system/src/cluster/config.dart';
+import 'package:actor_system/src/cluster/messages/handshake.dart';
 import 'package:logging/logging.dart';
+import 'package:stream_channel/isolate_channel.dart';
 import 'package:yaml/yaml.dart';
 
 Future<Config> _readConfig({String configName = 'config'}) async {
@@ -22,6 +26,7 @@ Future<Config> _readConfig({String configName = 'config'}) async {
       config['localNode']['port'],
       config['localNode']['id'],
     ),
+    config['workers'],
     config['secret'],
     config['logLevel'],
   );
@@ -43,6 +48,7 @@ class NodeConnection {
 class SystemNode {
   final _log = Logger('SystemNode');
   final _nodeConnections = <String, NodeConnection>{};
+  final _workerChannels = <IsolateChannel<Uint8List>>[];
   final String _configName;
   late final Config _config;
   NodeState _state = NodeState.created;
@@ -51,6 +57,8 @@ class SystemNode {
 
   SystemNode(this._configName);
 
+  NodeState get state => _state;
+
   Future<void> init() async {
     _log.info('init <');
 
@@ -58,6 +66,9 @@ class SystemNode {
     if (_state != NodeState.created) {
       throw StateError('node is not in state ${NodeState.created.name}');
     }
+
+    _state = NodeState.starting;
+    _log.info('init | set state to ${_state.name}');
 
     // read config
     _log.info('init | loading config with name $_configName...');
@@ -72,9 +83,6 @@ class SystemNode {
     _log.info('init | configure log level');
     Logger.root.level = _config.logLevel.toLogLevel();
 
-    // periodically connect to other seed nodes
-    _startConnectingToMissingNodes();
-
     // bind server socket
     _log.info('init | binding server socket to ${_config.localNode}...');
     final serverSocket = await ServerSocket.bind(
@@ -87,8 +95,12 @@ class SystemNode {
     serverSocket.listen(_handleNewConnection);
     _log.info('init | server socket bound and waiting for connections...');
 
-    _state = NodeState.starting;
-    _log.info('init | set state to ${_state.name}');
+    // periodically connect to other seed nodes
+    if (_hasMissingSeedNodes()) {
+      _startConnectingToMissingNodes();
+    } else {
+      await _startNode();
+    }
 
     _log.info('init >');
   }
@@ -155,6 +167,10 @@ class SystemNode {
 
       // store connection
       _addConnection(handshakeRequest.nodeId, NodeConnection(socketAdapter));
+
+      if (!_hasMissingSeedNodes()) {
+        await _startNode();
+      }
     } catch (e) {
       timer.cancel();
       _log.info('handleNewConnection | error: $e');
@@ -240,12 +256,9 @@ class SystemNode {
       }
     }
 
+    // start node
     if (!_hasMissingSeedNodes()) {
-      _stopConnectingToMissingNodes();
-      if (_state != NodeState.started) {
-        _state = NodeState.started;
-        _log.info('connectToSeedNodes | set state to ${_state.name}');
-      }
+      await _startNode();
     }
 
     _log.info('connectToSeedNodes >');
@@ -261,13 +274,6 @@ class SystemNode {
     } else {
       _nodeConnections[nodeId] = connection;
       _log.info('addConnection | connection added');
-      if (!_hasMissingSeedNodes()) {
-        _stopConnectingToMissingNodes();
-        if (_state != NodeState.started) {
-          _state = NodeState.started;
-          _log.info('addConnection | set state to ${_state.name}');
-        }
-      }
     }
     _log.info('addConnection >');
   }
@@ -295,5 +301,31 @@ class SystemNode {
   void _stopConnectingToMissingNodes() {
     _connectTimer?.cancel();
     _connectTimer = null;
+  }
+
+  Future<void> _startNode() async {
+    _log.info('startNode <');
+    _stopConnectingToMissingNodes();
+    _log.info('startNode | state is ${_state.name}');
+    if (_state != NodeState.started) {
+      for (var workerId = 0; workerId < _config.workers; workerId++) {
+        final receivePort = ReceivePort();
+        await Isolate.spawn<WorkerBootstrapMsg>(
+          bootstrapWorker,
+          WorkerBootstrapMsg(
+            _config.localNode.id,
+            workerId,
+            receivePort.sendPort,
+          ),
+          debugName: '${_config.localNode.id}:$workerId',
+        );
+        _workerChannels
+            .add(IsolateChannel<Uint8List>.connectReceive(receivePort));
+      }
+      _log.info('startNode | ${_config.workers} worker(s) started');
+      _state = NodeState.started;
+      _log.info('startNode | set state to ${_state.name}');
+    }
+    _log.info('startNode >');
   }
 }

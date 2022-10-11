@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:actor_system/src/io/ring_buffer.dart';
+import 'package:actor_system/src/cluster/ring_buffer.dart';
 
 Future<int> _deserializeSize(StreamReader reader) async {
   final list = await reader._takeCount(4);

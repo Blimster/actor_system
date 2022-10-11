@@ -13,14 +13,14 @@ class MessageB {
 }
 
 // the actor factory
-Actor actorFactory(ActorContext context) {
+Actor actorFactory(Uri path) {
   // handler for message of type MessageA
-  void handleA(MessageA message) {
+  void handleA(_, MessageA message) {
     print('handleA: ${message.payloadA}');
   }
 
   // handler for message of type MessageB
-  void handleB(MessageB message) {
+  void handleB(_, MessageB message) {
     print('handleA: ${message.payloadB}');
   }
 
@@ -36,7 +36,10 @@ void main() async {
   final system = ActorSystem();
 
   // create an actor using
-  final actor = await system.createActor(Uri(path: '/test/1'), actorFactory);
+  final actor = await system.createActor(
+    Uri(path: '/test/1'),
+    factory: actorFactory,
+  );
 
   // send messages to the actor
   actor.send(MessageA('payload A'));

@@ -1,9 +1,9 @@
 import 'package:actor_system/actor_system.dart';
 
-Actor actorFactory(ActorContext context) {
+Actor actorFactory(Uri path) {
   int calls = 0;
 
-  return (Object msg) {
+  return (_, Object? msg) {
     calls++;
     print('$calls: $msg');
     if (msg == 'sync error') {
@@ -21,7 +21,10 @@ Actor actorFactory(ActorContext context) {
 
 void main() async {
   final system = ActorSystem();
-  final actor = await system.createActor(Uri.parse('/test/1'), actorFactory);
+  final actor = await system.createActor(
+    Uri.parse('/test/1'),
+    factory: actorFactory,
+  );
   actor.send('foo');
   actor.send('sync error');
   actor.send('bar');

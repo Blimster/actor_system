@@ -1,7 +1,12 @@
-part of actor_system;
+import 'dart:async';
+
+import 'package:actor_system/src/system/actor.dart';
 
 /// A function that handles a message of an explicit type.
-typedef TypeBasedMessageHandler<T> = FutureOr<void> Function(T message);
+typedef TypeBasedMessageHandler<T> = FutureOr<void> Function(
+  ActorContext context,
+  T message,
+);
 
 /// An actor that handles a set of message types. With 'type', the runtime type
 /// of a message is meant.
@@ -21,7 +26,8 @@ class TypeBasedMessageActorBuilder {
     final messageType = _TypeOf<T>().get();
 
     if (_handlers.containsKey(messageType)) {
-      throw StateError('a message handler for type $messageType is already registered!');
+      throw StateError(
+          'a message handler for type $messageType is already registered!');
     }
     _handlers[messageType] = handler;
 
@@ -30,13 +36,13 @@ class TypeBasedMessageActorBuilder {
 
   /// Returns the actor.
   Actor actor() {
-    return (Object message) {
+    return (ActorContext context, Object? message) {
       final handler = _handlers[message.runtimeType];
       if (handler == null) {
         return null;
       }
 
-      return handler(message);
+      return handler(context, message);
     };
   }
 }
