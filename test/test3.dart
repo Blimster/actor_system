@@ -1,5 +1,5 @@
 import 'package:actor_system/actor_cluster.dart';
-import 'package:actor_system/src/base/string_extension.dart';
+import 'package:actor_system/src/base/string.dart';
 import 'package:logging/logging.dart';
 
 void main() async {

@@ -3,8 +3,8 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:actor_system/src/base/socket_extension.dart';
-import 'package:actor_system/src/base/string_extension.dart';
+import 'package:actor_system/src/base/socket.dart';
+import 'package:actor_system/src/base/string.dart';
 import 'package:actor_system/src/cluster/worker.dart';
 import 'package:actor_system/src/cluster/socket_Adapter.dart';
 import 'package:actor_system/src/cluster/config.dart';

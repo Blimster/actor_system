@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:actor_system/src/base/uri_extension.dart';
+import 'package:actor_system/src/base/reference.dart';
+import 'package:actor_system/src/base/uri.dart';
 
 /// An actor is a function that processes messages. This function should never
 /// be called directly. It should only be used as a parameter to
@@ -11,19 +12,25 @@ import 'package:actor_system/src/base/uri_extension.dart';
 /// one will be created using the factory.
 typedef Actor = FutureOr<void> Function(ActorContext context, Object? message);
 
+/// Looks up an actor by the given [Uri].
+typedef ActorLookup = FutureOr<ActorRef?> Function(Uri uri);
+
 /// A factory to create an actor. The given path can be used to determine the
 /// type of the actor to create.
 typedef ActorFactory = Actor Function(Uri path);
 
 /// A context for an actor. The context is provided to the actor for
 class ActorContext {
+  final String? name;
   final Uri _path;
-  final Map<Uri, ActorRef> _actorRefs;
-  final Map<Uri, ActorFactory> _factories;
+  final Map<String, ActorRef> _actorRefs;
+  final Map<String, ActorFactory> _factories;
+  NullableRef<ActorLookup> _externalLookup;
   ActorRef? _current;
   ActorRef? _replyTo;
 
-  ActorContext._(this._path, this._actorRefs, this._factories);
+  ActorContext._(this.name, this._path, this._actorRefs, this._factories,
+      this._externalLookup);
 
   /// The path of the actor. Every actor in a system has an unique path.
   Uri get path => _path;
@@ -44,7 +51,7 @@ class ActorContext {
   /// create a new actor if a call to [ActorContext.createActor] has no factory
   /// and the path matches.
   void registerFactory(Uri path, ActorFactory factory) {
-    _factories[path] = factory;
+    _factories[path.path] = factory;
   }
 
   /// Creates an actor at the given path.
@@ -89,17 +96,19 @@ class ActorContext {
     }
 
     // create, store and return the actor ref
-    final actorPath = path.actorPath(_actorRefs.keys);
+    final actorPath = completeActorPath(path, _actorRefs.keys);
     final actorRef = ActorRef._(
         actorPath,
         1000,
         actorFactory,
         ActorContext._(
+          name,
           actorPath,
           _actorRefs,
           _factories,
+          _externalLookup,
         ));
-    _actorRefs[actorPath] = actorRef;
+    _actorRefs[actorPath.path] = actorRef;
 
     return actorRef;
   }
@@ -107,7 +116,10 @@ class ActorContext {
   /// Looks up an actor reference using the given path. If no actor exists for
   /// that path, null is returned.
   Future<ActorRef?> lookupActor(Uri path) async {
-    return _actorRefs[path];
+    if (path.host.isEmpty || path.host == name) {
+      return _actorRefs[path.path];
+    }
+    return _externalLookup.value?.call(path);
   }
 }
 
@@ -115,7 +127,12 @@ class ActorContext {
 /// other. An actor can only create or lookup actors in the same [ActorSystem].
 class ActorSystem extends ActorContext {
   /// Creates a new [ActorSystem].
-  ActorSystem() : super._(Uri.parse('/'), {}, {});
+  ActorSystem({String? name})
+      : super._(name, Uri.parse('/'), {}, {}, NullableRef());
+
+  /// Sets the external lookup function. This function is used to lookup actors
+  /// in an external [ActorSystem].
+  set externalLookup(ActorLookup? lookup) => _externalLookup.value = lookup;
 }
 
 /// A reference to an actor. The only way to communicate with an actor is to
