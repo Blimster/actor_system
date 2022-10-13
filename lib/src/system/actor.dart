@@ -56,18 +56,20 @@ class ActorContext {
 
   /// Creates an actor at the given path.
   ///
-  /// The path for an actor must be unique. It is an error to create a new actor
-  /// with a path, an existing actor already is created with in the same actor
-  /// system. If the given path ends with a slash (/), the path is extended by
-  /// an uuid.
+  /// The path for an actor must be unique. It is an error to create an actor
+  /// with a path, an existing actor already is created with. If the given path
+  /// ends with a slash (/), the path is extended by an UUID.
   ///
   /// The given [ActorFactory] is called to create the actor for the given path.
-  /// If no factory is provided, a registered factory is used. If such factory
-  /// does not exists, an error is thrown.
+  /// If no factory is provided, a registered factory for the given path is
+  /// used. If such factory does not exists, an error is thrown.
   ///
-  /// If [useExistingActor] is set to true, the provided path ends with a slash
-  /// and an actor with the path already exists, the existing actor is return
-  /// instead a newly create actor.
+  /// If [useExistingActor] is set to true, the provided path ends not with a
+  /// slash and an actor with the path already exists, the existing actor is
+  /// returned instead a newly created actor.
+  ///
+  /// If [useExistingActor] is set to false and there is already an actor with
+  /// the given path, an error is thrown.
   Future<ActorRef> createActor(
     Uri path, {
     ActorFactory? factory,
