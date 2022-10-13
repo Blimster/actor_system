@@ -17,7 +17,7 @@ typedef ActorLookup = FutureOr<ActorRef?> Function(Uri uri);
 
 /// A factory to create an actor. The given path can be used to determine the
 /// type of the actor to create.
-typedef ActorFactory = Actor Function(Uri path);
+typedef ActorFactory = FutureOr<Actor> Function(Uri path);
 
 /// A context for an actor. The context is provided to the actor for
 class ActorContext {
@@ -62,7 +62,8 @@ class ActorContext {
   ///
   /// The given [ActorFactory] is called to create the actor for the given path.
   /// If no factory is provided, a registered factory for the given path is
-  /// used. If such factory does not exists, an error is thrown.
+  /// used. If such factory does not exists, an error is thrown. This factory
+  /// will also be used to recreate the actor in case of an error.
   ///
   /// If [useExistingActor] is set to true, the provided path ends not with a
   /// slash and an actor with the path already exists, the existing actor is
@@ -73,10 +74,15 @@ class ActorContext {
   Future<ActorRef> createActor(
     Uri path, {
     ActorFactory? factory,
+    int? mailboxSize,
     bool useExistingActor = false,
   }) async {
     if (!path.hasAbsolutePath) {
-      throw ArgumentError('parameter [path] must be an absolte uri!');
+      throw ArgumentError.value(path, 'path', 'must be an absolte uri!');
+    }
+    if (mailboxSize != null && mailboxSize <= 0) {
+      throw ArgumentError.value(
+          mailboxSize, 'mailboxSize', 'must be greater than zero!');
     }
 
     if (path.pathSegments.last.isNotEmpty) {
@@ -101,7 +107,8 @@ class ActorContext {
     final actorPath = completeActorPath(path, _actorRefs.keys);
     final actorRef = ActorRef._(
         actorPath,
-        1000,
+        mailboxSize ?? 1000,
+        await actorFactory(actorPath),
         actorFactory,
         ActorContext._(
           name,
@@ -148,8 +155,13 @@ class ActorRef {
   Actor _actor;
   bool _isProcessing = false;
 
-  ActorRef._(this.path, this._maxMailBoxSize, this._factory, this._context)
-      : _actor = _factory(path);
+  ActorRef._(
+    this.path,
+    this._maxMailBoxSize,
+    this._actor,
+    this._factory,
+    this._context,
+  );
 
   /// Sends a message to the actor referenced by this
   /// [ActorRef]. It is guaranteed, that an actor processes
@@ -187,12 +199,9 @@ class ActorRef {
           final envelope = _mailbox.removeFirst();
           _context._current = this;
           _context._replyTo = envelope.replyTo;
-          final result = _actor(_context, envelope.message);
-          if (result is Future) {
-            await result;
-          }
+          await _actor(_context, envelope.message);
         } catch (error) {
-          _actor = _factory(path);
+          _actor = await _factory(path);
         } finally {
           _isProcessing = false;
           _handleMessage();
