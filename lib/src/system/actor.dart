@@ -12,12 +12,15 @@ import 'package:actor_system/src/base/uri.dart';
 /// one will be created using the factory.
 typedef Actor = FutureOr<void> Function(ActorContext context, Object? message);
 
-/// Looks up an actor by the given [Uri].
-typedef ActorLookup = FutureOr<ActorRef?> Function(Uri uri);
-
 /// A factory to create an actor. The given path can be used to determine the
 /// type of the actor to create.
 typedef ActorFactory = FutureOr<Actor> Function(Uri path);
+
+/// Creates an actor for the given [Uri] outside of the current actor system.
+typedef ExternalActorCreate = FutureOr<ActorRef> Function(Uri path);
+
+/// Looks up an actor by the given [Uri] outside of the current actor system.
+typedef ExternalActorLookup = FutureOr<ActorRef?> Function(Uri path);
 
 /// A context for an actor. The context is provided to the actor for
 class ActorContext {
@@ -25,12 +28,19 @@ class ActorContext {
   final Uri _path;
   final Map<String, ActorRef> _actorRefs;
   final Map<String, ActorFactory> _factories;
-  NullableRef<ActorLookup> _externalLookup;
+  NullableRef<ExternalActorCreate> _externalCreate;
+  NullableRef<ExternalActorLookup> _externalLookup;
   ActorRef? _current;
   ActorRef? _replyTo;
 
-  ActorContext._(this.name, this._path, this._actorRefs, this._factories,
-      this._externalLookup);
+  ActorContext._(
+    this.name,
+    this._path,
+    this._actorRefs,
+    this._factories,
+    this._externalCreate,
+    this._externalLookup,
+  );
 
   /// The path of the actor. Every actor in a system has an unique path.
   Uri get path => _path;
@@ -85,6 +95,14 @@ class ActorContext {
           mailboxSize, 'mailboxSize', 'must be greater than zero!');
     }
 
+    if (path.host.isNotEmpty && path.host != name) {
+      final externalFactory = _externalCreate.value;
+      if (externalFactory != null) {
+        return externalFactory(path);
+      }
+      throw StateError('No external actor create function registered!');
+    }
+
     if (path.pathSegments.last.isNotEmpty) {
       // path does not end with a slash (/). is the path already in use?
       final existing = _actorRefs[path];
@@ -98,7 +116,7 @@ class ActorContext {
     }
 
     // search for registered factory if no factory is provided
-    final actorFactory = factory ?? _factories[path];
+    final actorFactory = factory ?? _factories[path.path];
     if (actorFactory == null) {
       throw ArgumentError.value(path.path, 'path', 'no factory for path!');
     }
@@ -115,6 +133,7 @@ class ActorContext {
           actorPath,
           _actorRefs,
           _factories,
+          _externalCreate,
           _externalLookup,
         ));
     _actorRefs[actorPath.path] = actorRef;
@@ -137,11 +156,24 @@ class ActorContext {
 class ActorSystem extends ActorContext {
   /// Creates a new [ActorSystem].
   ActorSystem({String? name})
-      : super._(name, Uri.parse('/'), {}, {}, NullableRef());
+      : super._(
+          name,
+          Uri.parse('/'),
+          {},
+          {},
+          NullableRef(),
+          NullableRef(),
+        );
+
+  /// Sets the external create function. This function is used to create actors
+  /// outside of the current [ActorSystem].
+  set externalCreate(ExternalActorCreate? create) =>
+      _externalCreate.value = create;
 
   /// Sets the external lookup function. This function is used to lookup actors
-  /// in an external [ActorSystem].
-  set externalLookup(ActorLookup? lookup) => _externalLookup.value = lookup;
+  /// outside of the current [ActorSystem].
+  set externalLookup(ExternalActorLookup? lookup) =>
+      _externalLookup.value = lookup;
 }
 
 /// A reference to an actor. The only way to communicate with an actor is to
