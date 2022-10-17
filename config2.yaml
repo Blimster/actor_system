@@ -12,5 +12,6 @@ localNode:
   host: "localhost"
   port: 8002
   id: node2
+workers: 1
 secret: "s3cr3t"
 logLevel: "ALL"
