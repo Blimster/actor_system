@@ -11,26 +11,9 @@ import 'package:actor_system/src/cluster/config.dart';
 import 'package:actor_system/src/cluster/messages/handshake.dart';
 import 'package:logging/logging.dart';
 import 'package:stream_channel/isolate_channel.dart';
-import 'package:yaml/yaml.dart';
+import 'package:uuid/uuid.dart';
 
-Future<Config> _readConfig({String configName = 'config'}) async {
-  final yaml = await File('$configName.yaml').readAsString();
-  final YamlMap config = loadYaml(yaml);
-
-  return Config(
-    (config['seedNodes'] as YamlList)
-        .map((e) => ConfigNode(e['host'], e['port'], e['id']))
-        .toList(),
-    ConfigNode(
-      config['localNode']['host'],
-      config['localNode']['port'],
-      config['localNode']['id'],
-    ),
-    config['workers'],
-    config['secret'],
-    config['logLevel'],
-  );
-}
+typedef AfterInit = FutureOr<void> Function();
 
 enum NodeState {
   created,
@@ -39,49 +22,63 @@ enum NodeState {
   stopped,
 }
 
-class NodeConnection {
+class RemoteNode {
+  final String nodeId;
+  final String uuid;
   final SocketAdapter socketAdapter;
 
-  NodeConnection(this.socketAdapter);
+  RemoteNode(this.nodeId, this.uuid, this.socketAdapter);
 }
 
-class SystemNode {
-  final _log = Logger('SystemNode');
-  final _nodeConnections = <String, NodeConnection>{};
+class ActorClusterNode {
+  final _log = Logger('ActorClusterNode');
+  final _uuid = Uuid().v4();
+  final _remoteNodes = <String, RemoteNode>{};
   final _workerChannels = <IsolateChannel<Uint8List>>[];
   final String _configName;
   late final Config _config;
+  AfterInit? _afterInit;
   NodeState _state = NodeState.created;
   ServerSocket? _serverSocket;
   Timer? _connectTimer;
 
-  SystemNode(this._configName);
+  ActorClusterNode(this._configName);
 
   NodeState get state => _state;
 
-  Future<void> init() async {
-    _log.info('init <');
+  Future<void> init({AfterInit? afterInit}) async {
+    _log.info('init < afterInit=$afterInit');
 
     _log.info('init | state is ${_state.name}');
     if (_state != NodeState.created) {
       throw StateError('node is not in state ${NodeState.created.name}');
     }
 
+    _afterInit = afterInit;
     _state = NodeState.starting;
     _log.info('init | set state to ${_state.name}');
 
     // read config
     _log.info('init | loading config with name $_configName...');
-    _config = await _readConfig(configName: _configName);
+    _config = await readConfig(configName: _configName);
     _log.info('init | config loaded');
+
     _log.info('init | seedNodes: ${_config.seedNodes}');
     _log.info('init | localNode: ${_config.localNode}');
+    _log.info('init | workers: ${_config.workers}');
     _log.info('init | secret: ${'*' * _config.secret.length}');
     _log.info('init | logLevel: ${_config.logLevel}');
+    _log.info('init | node uuid: ${_uuid}');
 
     // set log level
     _log.info('init | configure log level');
     Logger.root.level = _config.logLevel.toLogLevel();
+
+    // validate config
+    final uri = Uri.tryParse('//${_config.localNode.id}:8000/');
+    if (uri == null) {
+      throw ArgumentError('invalid local node id: ${_config.localNode.id}');
+    }
 
     // bind server socket
     _log.info('init | binding server socket to ${_config.localNode}...');
@@ -110,7 +107,7 @@ class SystemNode {
     _serverSocket?.close();
     _log.info('shutdown | server socket closed');
     _stopConnectingToMissingNodes();
-    _log.info('shutdown | connecting to missinh nodes stopped');
+    _log.info('shutdown | connecting to missing nodes stopped');
     _state = NodeState.stopped;
     _log.info('shutdown | set state to ${_state.name}');
     _log.info('shutdown >');
@@ -146,13 +143,20 @@ class SystemNode {
       _log.info('handleNewConnection | nodeId=${handshakeRequest.nodeId}');
 
       // check if node is already connected
-      if (_nodeConnections.containsKey(handshakeRequest.nodeId)) {
+      if (_remoteNodes.containsKey(handshakeRequest.nodeId)) {
         throw StateError('node already connected');
       }
 
       // check same node
       if (handshakeRequest.nodeId == _config.localNode.id) {
-        throw StateError('same nodeId');
+        throw StateError('same node id');
+      }
+
+      // check for seed node
+      if (!_missingSeedNodes()
+          .map((e) => e.id)
+          .contains(handshakeRequest.nodeId)) {
+        throw StateError('not a seed node');
       }
 
       // listen to socket close
@@ -162,11 +166,17 @@ class SystemNode {
       // send handshake response
       await socketAdapter.sendMessage(SocketMessage(
         handshakeResponseType,
-        HandshakeResponse(_config.localNode.id).toJson(),
+        HandshakeResponse(_config.localNode.id, _uuid).toJson(),
       ));
 
       // store connection
-      _addConnection(handshakeRequest.nodeId, NodeConnection(socketAdapter));
+      _addRemoteNode(
+          handshakeRequest.nodeId,
+          RemoteNode(
+            handshakeRequest.nodeId,
+            handshakeRequest.uuid,
+            socketAdapter,
+          ));
 
       if (!_hasMissingSeedNodes()) {
         await _startNode();
@@ -192,18 +202,19 @@ class SystemNode {
 
   void _handleClosedConnection(String nodeId) {
     _log.info('handleClosedConnection < nodeId=$nodeId');
-    _nodeConnections.remove(nodeId);
+    _remoteNodes.remove(nodeId);
     if (_hasMissingSeedNodes()) {
       _startConnectingToMissingNodes();
     }
-    _log.info('handleClosedConnection | connection for nodeId=$nodeId removed');
+    _log.info(
+        'handleClosedConnection | remote node for nodeId=$nodeId removed');
     _log.info('handleClosedConnection >');
   }
 
   Future<void> _connectToSeedNodes() async {
     _log.info('connectToSeedNodes <');
     final missingNodes = _config.seedNodes
-        .where((node) => !_nodeConnections.containsKey(node.id))
+        .where((node) => !_remoteNodes.containsKey(node.id))
         .where((node) => node.id != _config.localNode.id)
         .toList();
     _log.info(
@@ -226,6 +237,7 @@ class SystemNode {
           HandshakeRequest(
             _config.secret,
             _config.localNode.id,
+            _uuid,
           ).toJson(),
         ));
 
@@ -236,18 +248,32 @@ class SystemNode {
           throw StateError('invalid handshake response type');
         }
 
-        // read handshake response and check node id
+        // read handshake response
         final handshakeResponse = HandshakeResponse.fromJson(response.content);
-        if (handshakeResponse.nodeId != node.id) {
-          throw StateError('invalid handshake response nodeId');
-        }
         _log.info('connectToSeedNodes | received handshake response');
+
+        // check node id
+        if (handshakeResponse.nodeId != node.id) {
+          throw StateError(
+              'invalid handshake response node id (${handshakeResponse.nodeId})');
+        }
+
+        // check uuid
+        if (handshakeResponse.uuid == _uuid) {
+          throw StateError('remote node has same uuid');
+        }
 
         // remove connection on closed socket
         socketAdapter.onClose = () => _handleClosedConnection(node.id);
 
         // store connection
-        _addConnection(node.id, NodeConnection(socketAdapter));
+        _addRemoteNode(
+            handshakeResponse.nodeId,
+            RemoteNode(
+              handshakeResponse.nodeId,
+              handshakeResponse.uuid,
+              socketAdapter,
+            ));
       } catch (e) {
         _log.info('connectToSeedNodes | error: $e');
         _log.info('connectToSeedNodes | closing socket...');
@@ -264,29 +290,38 @@ class SystemNode {
     _log.info('connectToSeedNodes >');
   }
 
-  void _addConnection(String nodeId, NodeConnection connection) {
-    _log.info('addConnection < nodeId=$nodeId');
-    if (_nodeConnections.containsKey(nodeId)) {
-      _log.warning('addConnection | connection for already exists');
-      _log.info('addConnection | closing socket...');
+  void _addRemoteNode(String nodeId, RemoteNode connection) {
+    _log.info('addRemoteNode < nodeId=$nodeId');
+    if (_remoteNodes.containsKey(nodeId)) {
+      _log.warning('addRemoteNode | remote node for already exists');
+      _log.info('addRemoteNode | closing socket...');
       connection.socketAdapter.close();
-      _log.info('addConnection | socket closed');
+      _log.info('addRemoteNode | socket closed');
     } else {
-      _nodeConnections[nodeId] = connection;
-      _log.info('addConnection | connection added');
+      _remoteNodes[nodeId] = connection;
+      _log.info('addRemoteNode | remote node added');
     }
-    _log.info('addConnection >');
+    _log.info('addRemoteNode >');
   }
 
   List<ConfigNode> _missingSeedNodes() {
     return _config.seedNodes
-        .where((node) => !_nodeConnections.containsKey(node.id))
+        .where((node) => !_remoteNodes.containsKey(node.id))
         .where((node) => node.id != _config.localNode.id)
         .toList();
   }
 
   bool _hasMissingSeedNodes() {
     return _missingSeedNodes().isNotEmpty;
+  }
+
+  bool _isLeader() {
+    final remoteUuids = _remoteNodes.values.map((e) => e.uuid).toList()..sort();
+    if (remoteUuids.isEmpty) {
+      return true;
+    }
+    final smallestRemoteUuid = remoteUuids.first;
+    return _uuid.compareTo(smallestRemoteUuid) < 0;
   }
 
   void _startConnectingToMissingNodes() {
@@ -323,6 +358,15 @@ class SystemNode {
             .add(IsolateChannel<Uint8List>.connectReceive(receivePort));
       }
       _log.info('startNode | ${_config.workers} worker(s) started');
+
+      final isLeader = _isLeader();
+      _log.info('startNode | node is ${isLeader ? '' : 'not '}leader');
+      if (isLeader) {
+        _log.info('startNode | calling afterInit callback...');
+        await _afterInit?.call();
+        _log.info('startNode | returned from afterInit callback');
+      }
+
       _state = NodeState.started;
       _log.info('startNode | set state to ${_state.name}');
     }

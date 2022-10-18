@@ -28,5 +28,10 @@ void bootstrapWorker(WorkerBootstrapMsg message) {
     receivePort,
     message.sendPort,
   );
-  Worker(message.nodeId, message.workerId, ActorSystem(), isolateChannel);
+  Worker(
+    message.nodeId,
+    message.workerId,
+    ActorSystem(name: '${message.nodeId}_${message.workerId}'),
+    isolateChannel,
+  );
 }

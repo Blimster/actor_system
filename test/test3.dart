@@ -9,6 +9,6 @@ void main() async {
         '[${record.time.toString().padRight(26, '0')}|${record.level.name.padLeft(7, ' ')}|${record.loggerName.abbreviate(20).padLeft(20)}] ${record.message}');
   });
 
-  await SystemNode('config3')
+  await ActorClusterNode('config3')
     ..init();
 }
