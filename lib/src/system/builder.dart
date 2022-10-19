@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:actor_system/src/system/actor.dart';
+import 'package:actor_system/src/system/context.dart';
 
 /// A function that handles a message of an explicit type.
 typedef TypeBasedMessageHandler<T> = FutureOr<void> Function(

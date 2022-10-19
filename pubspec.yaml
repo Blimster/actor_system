@@ -4,7 +4,7 @@ version: 0.1.0
 homepage: http://www.github.com/blimster/actor_system
 
 environment:
-    sdk: ">=2.13.0 <3.0.0"
+    sdk: ">=2.18.0 <3.0.0"
 
 dependencies:
     uuid: ^3.0.0

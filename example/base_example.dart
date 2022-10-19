@@ -11,7 +11,8 @@ Actor actorFactory(Uri path) {
     calls++;
 
     // just print the received message
-    print("actor ${context.path} received message: $message, call: $calls");
+    print(
+        "actor ${context.current.path} received message: $message, call: $calls");
   };
 }
 
