@@ -13,7 +13,7 @@ void prepareContext(
 }
 
 abstract class BaseContext {
-  final String? name;
+  final String? _name;
   final Map<String, ActorRef> _actorRefs;
   final Map<String, ActorFactory> _factories;
   NullableRef<ExternalActorCreate> _externalCreate;
@@ -22,7 +22,7 @@ abstract class BaseContext {
   ActorRef? _replyTo;
 
   BaseContext(
-    this.name,
+    this._name,
     this._actorRefs,
     this._factories,
     this._externalCreate,
@@ -60,7 +60,7 @@ abstract class BaseContext {
           mailboxSize, 'mailboxSize', 'must be greater than zero!');
     }
 
-    if (path.host.isNotEmpty && path.host != name) {
+    if (path.host.isNotEmpty && path.host != _name) {
       final externalFactory = _externalCreate.value;
       if (externalFactory != null) {
         return externalFactory(path);
@@ -94,7 +94,7 @@ abstract class BaseContext {
         await actorFactory(actorPath),
         actorFactory,
         ActorContext._(
-          name,
+          _name,
           _actorRefs,
           _factories,
           _externalCreate,
@@ -108,7 +108,7 @@ abstract class BaseContext {
   /// Looks up an actor reference using the given path. If no actor exists for
   /// that path, null is returned.
   Future<ActorRef?> lookupActor(Uri path) async {
-    if (path.host.isEmpty || path.host == name) {
+    if (path.host.isEmpty || path.host == _name) {
       return _actorRefs[path.path];
     }
     return _externalLookup.value?.call(path);

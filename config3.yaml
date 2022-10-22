@@ -1,8 +1,5 @@
 seedNodes:
   - host: "localhost"
-    port: 8001
-    id: node1
-  - host: "localhost"
     port: 8002
     id: node2
   - host: "localhost"

@@ -1,375 +1,72 @@
 import 'dart:async';
-import 'dart:io';
-import 'dart:isolate';
-import 'dart:typed_data';
+import 'dart:math';
 
-import 'package:actor_system/src/base/socket.dart';
-import 'package:actor_system/src/base/string.dart';
-import 'package:actor_system/src/cluster/config.dart';
-import 'package:actor_system/src/cluster/messages/handshake.dart';
-import 'package:actor_system/src/cluster/socket_Adapter.dart';
-import 'package:actor_system/src/cluster/worker.dart';
-import 'package:logging/logging.dart';
-import 'package:stream_channel/isolate_channel.dart';
-import 'package:uuid/uuid.dart';
+import 'package:actor_system/src/cluster/socket_adapter.dart';
+import 'package:actor_system/src/cluster/worker_adapter.dart';
+import 'package:actor_system/src/system/ref.dart';
 
-typedef AfterInit = FutureOr<void> Function();
-
-enum NodeState {
-  created,
-  starting,
-  started,
-  stopped,
-}
-
-class RemoteNode {
+abstract class Node {
   final String nodeId;
   final String uuid;
-  final SocketAdapter socketAdapter;
+  final int workers;
 
-  RemoteNode(this.nodeId, this.uuid, this.socketAdapter);
+  Node(this.nodeId, this.uuid, this.workers);
+
+  bool validateWorkerId(int workerId) {
+    return workerId <= workers;
+  }
+
+  bool get isLocal;
+
+  Future<ActorRef> createActor(
+    Uri path,
+    int? mailboxSize,
+    bool useExistingActor,
+  );
 }
 
-class ActorClusterNode {
-  final _log = Logger('ActorClusterNode');
-  final _uuid = Uuid().v4();
-  final _remoteNodes = <String, RemoteNode>{};
-  final _workerChannels = <IsolateChannel<Uint8List>>[];
-  final String _configName;
-  late final Config _config;
-  AfterInit? _afterInit;
-  NodeState _state = NodeState.created;
-  ServerSocket? _serverSocket;
-  Timer? _connectTimer;
+class LocalNode extends Node {
+  final List<WorkerAdapter> workerAdapters;
 
-  ActorClusterNode(this._configName);
+  LocalNode(
+    super.nodeId,
+    super.uuid,
+    super.workers,
+    this.workerAdapters,
+  );
 
-  NodeState get state => _state;
+  @override
+  bool get isLocal => true;
 
-  Future<void> init({AfterInit? afterInit}) async {
-    _log.info('init < afterInit=$afterInit');
+  @override
+  Future<ActorRef> createActor(
+    Uri path,
+    int? mailboxSize,
+    bool useExistingActor,
+  ) async {
+    final workerId = path.port;
+    final workerAdapter = workerAdapters[
+        workerId != 0 ? workerId - 1 : Random().nextInt(workerAdapters.length)];
 
-    _log.info('init | state is ${_state.name}');
-    if (_state != NodeState.created) {
-      throw StateError('node is not in state ${NodeState.created.name}');
-    }
-
-    _afterInit = afterInit;
-    _state = NodeState.starting;
-    _log.info('init | set state to ${_state.name}');
-
-    // read config
-    _log.info('init | loading config with name $_configName...');
-    _config = await readConfig(configName: _configName);
-    _log.info('init | config loaded');
-
-    _log.info('init | seedNodes: ${_config.seedNodes}');
-    _log.info('init | localNode: ${_config.localNode}');
-    _log.info('init | workers: ${_config.workers}');
-    _log.info('init | secret: ${'*' * _config.secret.length}');
-    _log.info('init | logLevel: ${_config.logLevel}');
-    _log.info('init | node uuid: ${_uuid}');
-
-    // set log level
-    _log.info('init | configure log level');
-    Logger.root.level = _config.logLevel.toLogLevel();
-
-    // validate config
-    final uri = Uri.tryParse('//${_config.localNode.id}:8000/');
-    if (uri == null) {
-      throw ArgumentError('invalid local node id: ${_config.localNode.id}');
-    }
-
-    // bind server socket
-    _log.info('init | binding server socket to ${_config.localNode}...');
-    final serverSocket = await ServerSocket.bind(
-      _config.localNode.host,
-      _config.localNode.port,
-    );
-    _serverSocket = serverSocket;
-
-    // wait for new connections
-    serverSocket.listen(_handleNewConnection);
-    _log.info('init | server socket bound and waiting for connections...');
-
-    // periodically connect to other seed nodes
-    if (_hasMissingSeedNodes()) {
-      _startConnectingToMissingNodes();
-    } else {
-      await _startNode();
-    }
-
-    _log.info('init >');
+    await workerAdapter.createActor(path, mailboxSize, useExistingActor);
+    throw UnimplementedError();
   }
+}
 
-  void shutdown() {
-    _log.info('shutdown <');
-    _serverSocket?.close();
-    _log.info('shutdown | server socket closed');
-    _stopConnectingToMissingNodes();
-    _log.info('shutdown | connecting to missing nodes stopped');
-    _state = NodeState.stopped;
-    _log.info('shutdown | set state to ${_state.name}');
-    _log.info('shutdown >');
-  }
+class RemoteNode extends Node {
+  final SocketAdapter socketAdapter;
 
-  Future<void> _handleNewConnection(Socket socket) async {
-    final timeout = 3;
-    _log.info('handleNewConnection < socket=${socket.address}');
-    final timer = Timer(Duration(seconds: timeout),
-        () => _handleTimedOutConnection(timeout, socket));
-    try {
-      final socketAdapter = SocketAdapter(socket);
-      final message = await socketAdapter.receiveData();
+  RemoteNode(super.nodeId, super.uuid, super.workers, this.socketAdapter);
 
-      // received a message, cancel the timer
-      timer.cancel();
+  @override
+  bool get isLocal => false;
 
-      // check message type
-      if (message.type != handshakeRequestType) {
-        throw StateError(
-            'invalid handshake message type. message type=${message.type}');
-      }
-
-      // read message content
-      final handshakeRequest = HandshakeRequest.fromJson(message.content);
-      _log.info('handleNewConnection | handshake request received');
-
-      // check secret
-      if (handshakeRequest.secret != _config.secret) {
-        throw StateError('invalid handshake secret');
-      }
-      _log.info('handleNewConnection | secret is valid');
-      _log.info('handleNewConnection | nodeId=${handshakeRequest.nodeId}');
-
-      // check if node is already connected
-      if (_remoteNodes.containsKey(handshakeRequest.nodeId)) {
-        throw StateError('node already connected');
-      }
-
-      // check same node
-      if (handshakeRequest.nodeId == _config.localNode.id) {
-        throw StateError('same node id');
-      }
-
-      // check for seed node
-      if (!_missingSeedNodes()
-          .map((e) => e.id)
-          .contains(handshakeRequest.nodeId)) {
-        throw StateError('not a seed node');
-      }
-
-      // listen to socket close
-      socketAdapter.onClose =
-          () => _handleClosedConnection(handshakeRequest.nodeId);
-
-      // send handshake response
-      await socketAdapter.sendMessage(SocketMessage(
-        handshakeResponseType,
-        HandshakeResponse(_config.localNode.id, _uuid).toJson(),
-      ));
-
-      // store connection
-      _addRemoteNode(
-          handshakeRequest.nodeId,
-          RemoteNode(
-            handshakeRequest.nodeId,
-            handshakeRequest.uuid,
-            socketAdapter,
-          ));
-
-      if (!_hasMissingSeedNodes()) {
-        await _startNode();
-      }
-    } catch (e) {
-      timer.cancel();
-      _log.info('handleNewConnection | error: $e');
-      _log.info('handleNewConnection | closing socket...');
-      socket.destroy();
-      _log.info('handleNewConnection | socket closed');
-    }
-    _log.info('handleNewConnection >');
-  }
-
-  void _handleTimedOutConnection(int timeout, Socket socket) {
-    _log.info(
-        'handleTimedOutConnection < timeout=$timeout, socket=${socket.addressToString()}');
-    _log.info('handleTimedOutConnection | closing socket...');
-    socket.destroy();
-    _log.info('handleTimedOutConnection | socket closed');
-    _log.info('handleTimedOutConnection >');
-  }
-
-  void _handleClosedConnection(String nodeId) {
-    _log.info('handleClosedConnection < nodeId=$nodeId');
-    _remoteNodes.remove(nodeId);
-    if (_hasMissingSeedNodes()) {
-      _startConnectingToMissingNodes();
-    }
-    _log.info(
-        'handleClosedConnection | remote node for nodeId=$nodeId removed');
-    _log.info('handleClosedConnection >');
-  }
-
-  Future<void> _connectToSeedNodes() async {
-    _log.info('connectToSeedNodes <');
-    final missingNodes = _config.seedNodes
-        .where((node) => !_remoteNodes.containsKey(node.id))
-        .where((node) => node.id != _config.localNode.id)
-        .toList();
-    _log.info(
-        'connectToSeedNodes | missingNodes=${missingNodes.map((e) => e.id).toList()}');
-    for (final node in missingNodes) {
-      Socket? socketToClose;
-      try {
-        _log.info('connectToSeedNodes | trying to connect to node ${node.id}');
-
-        // open socket connection
-        final socket = await Socket.connect(node.host, node.port);
-        final socketAdapter = SocketAdapter(socket);
-        socketToClose = socket;
-        _log.info('connectToSeedNodes | connection established');
-
-        // send handshake request
-        _log.info('connectToSeedNodes | sending handshake request...');
-        socketAdapter.sendMessage(SocketMessage(
-          handshakeRequestType,
-          HandshakeRequest(
-            _config.secret,
-            _config.localNode.id,
-            _uuid,
-          ).toJson(),
-        ));
-
-        // read response type and check it
-        _log.info('connectToSeedNodes | waiting for handshake response...');
-        final response = await socketAdapter.receiveData();
-        if (response.type != handshakeResponseType) {
-          throw StateError('invalid handshake response type');
-        }
-
-        // read handshake response
-        final handshakeResponse = HandshakeResponse.fromJson(response.content);
-        _log.info('connectToSeedNodes | received handshake response');
-
-        // check node id
-        if (handshakeResponse.nodeId != node.id) {
-          throw StateError(
-              'invalid handshake response node id (${handshakeResponse.nodeId})');
-        }
-
-        // check uuid
-        if (handshakeResponse.uuid == _uuid) {
-          throw StateError('remote node has same uuid');
-        }
-
-        // remove connection on closed socket
-        socketAdapter.onClose = () => _handleClosedConnection(node.id);
-
-        // store connection
-        _addRemoteNode(
-            handshakeResponse.nodeId,
-            RemoteNode(
-              handshakeResponse.nodeId,
-              handshakeResponse.uuid,
-              socketAdapter,
-            ));
-      } catch (e) {
-        _log.info('connectToSeedNodes | error: $e');
-        _log.info('connectToSeedNodes | closing socket...');
-        socketToClose?.destroy();
-        _log.info('connectToSeedNodes | socket closed');
-      }
-    }
-
-    // start node
-    if (!_hasMissingSeedNodes()) {
-      await _startNode();
-    }
-
-    _log.info('connectToSeedNodes >');
-  }
-
-  void _addRemoteNode(String nodeId, RemoteNode connection) {
-    _log.info('addRemoteNode < nodeId=$nodeId');
-    if (_remoteNodes.containsKey(nodeId)) {
-      _log.warning('addRemoteNode | remote node for already exists');
-      _log.info('addRemoteNode | closing socket...');
-      connection.socketAdapter.close();
-      _log.info('addRemoteNode | socket closed');
-    } else {
-      _remoteNodes[nodeId] = connection;
-      _log.info('addRemoteNode | remote node added');
-    }
-    _log.info('addRemoteNode >');
-  }
-
-  List<ConfigNode> _missingSeedNodes() {
-    return _config.seedNodes
-        .where((node) => !_remoteNodes.containsKey(node.id))
-        .where((node) => node.id != _config.localNode.id)
-        .toList();
-  }
-
-  bool _hasMissingSeedNodes() {
-    return _missingSeedNodes().isNotEmpty;
-  }
-
-  bool _isLeader() {
-    final remoteUuids = _remoteNodes.values.map((e) => e.uuid).toList()..sort();
-    if (remoteUuids.isEmpty) {
-      return true;
-    }
-    final smallestRemoteUuid = remoteUuids.first;
-    return _uuid.compareTo(smallestRemoteUuid) < 0;
-  }
-
-  void _startConnectingToMissingNodes() {
-    if (_connectTimer == null && _hasMissingSeedNodes()) {
-      _connectTimer = Timer.periodic(
-        Duration(seconds: 5),
-        (_) => _connectToSeedNodes(),
-      );
-    }
-  }
-
-  void _stopConnectingToMissingNodes() {
-    _connectTimer?.cancel();
-    _connectTimer = null;
-  }
-
-  Future<void> _startNode() async {
-    _log.info('startNode <');
-    _stopConnectingToMissingNodes();
-    _log.info('startNode | state is ${_state.name}');
-    if (_state != NodeState.started) {
-      for (var workerId = 0; workerId < _config.workers; workerId++) {
-        final receivePort = ReceivePort();
-        await Isolate.spawn<WorkerBootstrapMsg>(
-          bootstrapWorker,
-          WorkerBootstrapMsg(
-            _config.localNode.id,
-            workerId,
-            receivePort.sendPort,
-          ),
-          debugName: '${_config.localNode.id}:$workerId',
-        );
-        _workerChannels
-            .add(IsolateChannel<Uint8List>.connectReceive(receivePort));
-      }
-      _log.info('startNode | ${_config.workers} worker(s) started');
-
-      final isLeader = _isLeader();
-      _log.info('startNode | node is ${isLeader ? '' : 'not '}leader');
-      if (isLeader) {
-        _log.info('startNode | calling afterInit callback...');
-        await _afterInit?.call();
-        _log.info('startNode | returned from afterInit callback');
-      }
-
-      _state = NodeState.started;
-      _log.info('startNode | set state to ${_state.name}');
-    }
-    _log.info('startNode >');
+  @override
+  Future<ActorRef> createActor(
+    Uri path,
+    int? mailboxSize,
+    bool useExistingActor,
+  ) {
+    throw UnimplementedError();
   }
 }

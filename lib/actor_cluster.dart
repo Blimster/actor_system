@@ -1,1 +1,3 @@
-export 'src/cluster/node.dart' show ActorClusterNode, NodeState, AfterInit;
+export 'src/cluster/cluster.dart'
+    show ActorCluster, NodeState, AfterClusterInit;
+export 'src/cluster/context.dart' show ClusterContext;
