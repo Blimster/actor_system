@@ -3,6 +3,16 @@ import 'package:actor_system/src/base/uri.dart';
 import 'package:actor_system/src/system/actor.dart';
 import 'package:actor_system/src/system/ref.dart';
 
+/// Defines the handling of an actor path if the host part is missing.
+enum MissingHostHandling {
+  /// The path is considered to be a path in the local system.
+  asLocal,
+
+  /// The path is considered to be an external path. [ExternalActorCreate] and
+  /// [ExternalActorLookup] are used to create and lookup the actor.
+  asExternal,
+}
+
 void prepareContext(
   ActorContext context,
   ActorRef current,
@@ -13,7 +23,8 @@ void prepareContext(
 }
 
 abstract class BaseContext {
-  final String? _name;
+  final String _name;
+  final MissingHostHandling _missingHostHandling;
   final Map<String, ActorRef> _actorRefs;
   final Map<String, ActorFactory> _factories;
   NullableRef<ExternalActorCreate> _externalCreate;
@@ -23,6 +34,7 @@ abstract class BaseContext {
 
   BaseContext(
     this._name,
+    this._missingHostHandling,
     this._actorRefs,
     this._factories,
     this._externalCreate,
@@ -60,10 +72,11 @@ abstract class BaseContext {
           mailboxSize, 'mailboxSize', 'must be greater than zero!');
     }
 
-    if (path.host.isNotEmpty && path.host != _name) {
-      final externalFactory = _externalCreate.value;
-      if (externalFactory != null) {
-        return externalFactory(path);
+    /// check if the actor must be ctreated externally
+    if (_isLocalPath(path)) {
+      final externalCreate = _externalCreate.value;
+      if (externalCreate != null) {
+        return externalCreate(path);
       }
       throw StateError('No external actor create function registered!');
     }
@@ -95,6 +108,7 @@ abstract class BaseContext {
         actorFactory,
         ActorContext._(
           _name,
+          _missingHostHandling,
           _actorRefs,
           _factories,
           _externalCreate,
@@ -108,10 +122,17 @@ abstract class BaseContext {
   /// Looks up an actor reference using the given path. If no actor exists for
   /// that path, null is returned.
   Future<ActorRef?> lookupActor(Uri path) async {
-    if (path.host.isEmpty || path.host == _name) {
-      return _actorRefs[path.path];
+    if (_isLocalPath(path)) {
+      return _externalLookup.value?.call(path);
     }
-    return _externalLookup.value?.call(path);
+    return _actorRefs[path.path];
+  }
+
+  bool _isLocalPath(Uri path) {
+    if (path.host.isEmpty) {
+      return _missingHostHandling == MissingHostHandling.asLocal;
+    }
+    return path.host == localSystem || path.host.toLowerCase() == _name;
   }
 }
 
@@ -119,6 +140,7 @@ abstract class BaseContext {
 class ActorContext extends BaseContext {
   ActorContext._(
     super.name,
+    super._missingHostHandling,
     super._actorRefs,
     super._factories,
     super._externalCreate,
@@ -142,9 +164,12 @@ class ActorContext extends BaseContext {
 /// other. An actor can only create or lookup actors in the same [ActorSystem].
 class ActorSystem extends BaseContext {
   /// Creates a new [ActorSystem].
-  ActorSystem({String? name})
+  ActorSystem(
+      {String name = localSystem,
+      MissingHostHandling missingHostHandling = MissingHostHandling.asLocal})
       : super(
-          name,
+          name.toLowerCase(),
+          missingHostHandling,
           {},
           {},
           NullableRef(),

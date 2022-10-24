@@ -43,6 +43,12 @@ Node findNode(List<Node> nodes, Uri path) {
     final Random random = Random();
     final nodeIndex = random.nextInt(nodes.length);
     return nodes[nodeIndex];
+  } else if (path.host == localSystem) {
+    try {
+      node = nodes.firstWhere((node) => node.isLocal);
+    } on StateError {
+      // ignore: no node found
+    }
   } else {
     try {
       node = nodes.firstWhere((node) => path.host == node.nodeId);

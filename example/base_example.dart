@@ -21,9 +21,9 @@ void main() async {
   final actorSystem = ActorSystem();
 
   // create 2 actors
-  final actorRef1 = await actorSystem.createActor(Uri.parse('/test/1'),
+  final actorRef1 = await actorSystem.createActor(actorPath('/test/1'),
       factory: actorFactory);
-  final actorRef2 = await actorSystem.createActor(Uri.parse('/test/2'),
+  final actorRef2 = await actorSystem.createActor(actorPath('/test/2'),
       factory: actorFactory);
 
   // send messages to the actors

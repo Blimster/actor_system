@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:actor_system/actor_system.dart';
 import 'package:actor_system/src/base/socket.dart';
 import 'package:actor_system/src/base/string.dart';
 import 'package:actor_system/src/cluster/config.dart';
@@ -12,7 +13,6 @@ import 'package:actor_system/src/cluster/node.dart';
 import 'package:actor_system/src/cluster/socket_adapter.dart';
 import 'package:actor_system/src/cluster/worker.dart';
 import 'package:actor_system/src/cluster/worker_adapter.dart';
-import 'package:actor_system/src/system/context.dart';
 import 'package:logging/logging.dart';
 import 'package:stream_channel/isolate_channel.dart';
 import 'package:uuid/uuid.dart';
@@ -88,9 +88,20 @@ class ActorCluster {
     Logger.root.level = _config.logLevel.toLogLevel();
 
     // validate config
+    if (_config.localNode.id == localSystem) {
+      throw ArgumentError.value(
+        'localNode.id',
+        _config.localNode.id,
+        '"$localSystem" is reserved.',
+      );
+    }
     final uri = Uri.tryParse('//${_config.localNode.id}:8000/');
     if (uri == null) {
-      throw ArgumentError('invalid local node id: ${_config.localNode.id}');
+      throw ArgumentError.value(
+        'localNode.id',
+        _config.localNode.id,
+        'must be a valid host in an URI',
+      );
     }
 
     // bind server socket
