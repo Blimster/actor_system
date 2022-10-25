@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:typed_data';
 
 import 'package:actor_system/actor_system.dart';
 import 'package:actor_system/src/base/socket.dart';
@@ -41,7 +40,7 @@ class ActorCluster {
   final _log = Logger('ActorClusterNode');
   final _uuid = Uuid().v4();
   final _remoteNodes = <String, RemoteNode>{};
-  final _workerAdapters = <WorkerAdapter>[];
+  final _workerAdapters = <IsolateAdapter>[];
   final String _configName;
   late final Config _config;
   AfterClusterInit? _afterClusterInit;
@@ -384,6 +383,7 @@ class ActorCluster {
     _log.info('stopWorkers <');
     for (final workerAdaper in _workerAdapters) {
       await workerAdaper.stop();
+      _log.info('stopWorkers | worker ${workerAdaper.workerId} stopped');
     }
     _workerAdapters.clear();
     _log.info('stopWorkers >');
@@ -394,21 +394,23 @@ class ActorCluster {
     _stopConnectingToMissingNodes();
     _log.info('startNode | state is ${_state.name}');
     if (_state != NodeState.started) {
-      for (var workerId = 0; workerId < _config.workers; workerId++) {
+      for (var workerId = 1; workerId <= _config.workers; workerId++) {
         final receivePort = ReceivePort();
         final isolate = await Isolate.spawn<WorkerBootstrapMsg>(
           bootstrapWorker,
           WorkerBootstrapMsg(
             _config.localNode.id,
-            workerId + 1,
+            workerId,
             _prepareNodeSystem,
             receivePort.sendPort,
           ),
           debugName: '${_config.localNode.id}:$workerId',
         );
-        _workerAdapters.add(WorkerAdapter(
+        _workerAdapters.add(IsolateAdapter(
+          _config.localNode.id,
+          workerId,
           isolate,
-          IsolateChannel<Uint8List>.connectReceive(receivePort),
+          IsolateChannel<IsolateMessage>.connectReceive(receivePort),
         ));
       }
       _log.info('startNode | ${_config.workers} worker(s) started');
@@ -432,8 +434,9 @@ class ActorCluster {
           _log.info('startNode | returned from afterInit callback');
           _state = NodeState.started;
           _log.info('startNode | set state to ${_state.name}');
-        } catch (_) {
-          _log.info('startNode | returned from afterInit callback with error');
+        } catch (e) {
+          _log.info(
+              'startNode | returned from afterInit callback with error: $e');
           shutdown();
         }
       }

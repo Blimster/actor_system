@@ -73,7 +73,7 @@ abstract class BaseContext {
     }
 
     /// check if the actor must be ctreated externally
-    if (_isLocalPath(path)) {
+    if (!_isLocalPath(path)) {
       final externalCreate = _externalCreate.value;
       if (externalCreate != null) {
         return externalCreate(path);
@@ -123,9 +123,9 @@ abstract class BaseContext {
   /// that path, null is returned.
   Future<ActorRef?> lookupActor(Uri path) async {
     if (_isLocalPath(path)) {
-      return _externalLookup.value?.call(path);
+      return _actorRefs[path.path];
     }
-    return _actorRefs[path.path];
+    return _externalLookup.value?.call(path);
   }
 
   bool _isLocalPath(Uri path) {

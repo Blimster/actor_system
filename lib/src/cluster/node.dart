@@ -26,7 +26,7 @@ abstract class Node {
 }
 
 class LocalNode extends Node {
-  final List<WorkerAdapter> workerAdapters;
+  final List<IsolateAdapter> workerAdapters;
 
   LocalNode(
     super.nodeId,
@@ -43,13 +43,16 @@ class LocalNode extends Node {
     Uri path,
     int? mailboxSize,
     bool useExistingActor,
-  ) async {
+  ) {
     final workerId = path.port;
     final workerAdapter = workerAdapters[
         workerId != 0 ? workerId - 1 : Random().nextInt(workerAdapters.length)];
 
-    await workerAdapter.createActor(path, mailboxSize, useExistingActor);
-    throw UnimplementedError();
+    return workerAdapter.createActor(
+      path,
+      mailboxSize,
+      useExistingActor,
+    );
   }
 }
 

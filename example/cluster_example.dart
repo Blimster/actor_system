@@ -9,11 +9,20 @@ void main(List<String> args) async {
         '[${record.time.toString().padRight(26, '0')}|${record.level.name.padLeft(7, ' ')}|${record.loggerName.abbreviate(20).padLeft(20)}] ${record.message}');
   });
 
-  await ActorCluster(args[0])
-    ..init(afterClusterInit: (context, isLeader) async {
+  final clusterNode = await ActorCluster(args[0]);
+  await clusterNode.init(
+    prepareNodeSystem: (system) {
+      system.registerFactory(Uri.parse('/foo/'), (path) {
+        return (context, msg) {
+          print('Received message: $msg');
+        };
+      });
+    },
+    afterClusterInit: (context, isLeader) async {
       if (isLeader) {
-        final actorRef = await context.createActor(Uri.parse('/foo'));
-        print(actorRef);
+        final actorRef = await context.createActor(Uri.parse('/foo/'));
+        print('actor created on path ${actorRef.path}');
       }
-    });
+    },
+  );
 }
