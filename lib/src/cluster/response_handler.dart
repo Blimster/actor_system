@@ -1,25 +1,40 @@
 import 'dart:async';
 
-class _PendingResponse {
-  final Completer completer;
-  final Timer timeoutTimer;
+abstract class RequestResponseEnvelope<T> {
+  final String type;
+  final String correlationId;
 
-  _PendingResponse(this.completer, this.timeoutTimer);
+  RequestResponseEnvelope(this.type, this.correlationId);
+
+  T get data;
 }
 
-class ResponseHandler {
+abstract class Response<T> {
+  String get type;
+  String get correlationId;
+  T get data;
+}
+
+class ResponseHandler<T> {
+  final Sink<RequestResponseEnvelope<T>> sink;
   final Map<String, Map<String, _PendingResponse>> handlers = {};
 
-  Future<R> waitForResponse<R>(
-    String type,
-    String correlationId, {
+  ResponseHandler(this.sink);
+
+  Future<R> request<R>(
+    RequestResponseEnvelope<T> request, {
     Duration timeout = const Duration(seconds: 5),
   }) {
-    final handlersForType = handlers.putIfAbsent(type, () => {});
+    final handlersForType = handlers.putIfAbsent(request.type, () => {});
 
     final completer = Completer<R>();
-    final timer = Timer(timeout, () => _handleTimeout(type, correlationId));
-    handlersForType[correlationId] = _PendingResponse(completer, timer);
+    final timer = Timer(
+      timeout,
+      () => _handleTimeout(request.type, request.correlationId),
+    );
+    handlersForType[request.correlationId] = _PendingResponse(completer, timer);
+
+    sink.add(request);
 
     return completer.future;
   }
@@ -55,4 +70,11 @@ class ResponseHandler {
     }
     return null;
   }
+}
+
+class _PendingResponse {
+  final Completer completer;
+  final Timer timeoutTimer;
+
+  _PendingResponse(this.completer, this.timeoutTimer);
 }

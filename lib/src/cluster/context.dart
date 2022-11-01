@@ -3,32 +3,25 @@ import 'dart:math';
 import 'package:actor_system/actor_system.dart';
 import 'package:actor_system/src/cluster/node.dart';
 
-ClusterContext createContext(List<Node> nodes) {
-  return ClusterContext._(nodes);
+ClusterContext createClusterContext(LocalNode localNode) {
+  return ClusterContext._(localNode);
 }
 
 class ClusterContext implements BaseContext {
-  final List<Node> nodes;
+  final LocalNode _localNode;
 
-  ClusterContext._(this.nodes);
+  ClusterContext._(this._localNode);
 
   @override
   Future<ActorRef> createActor(
     Uri path, {
     ActorFactory? factory,
     int? mailboxSize,
-    bool useExistingActor = false,
+    bool? useExistingActor,
   }) {
     assert(factory == null, 'factory is always ignored in cluster mode');
-
-    return findNode(
-      nodes,
-      path,
-    ).createActor(
-      path,
-      mailboxSize,
-      useExistingActor,
-    );
+    
+    return _localNode.createActor(path, mailboxSize, useExistingActor);
   }
 
   @override

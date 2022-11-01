@@ -8,4 +8,5 @@ localNode:
   id: node1
 workers: 2
 secret: "s3cr3t"
-logLevel: "ALL"
+logLevel: "INFO"
+timeout: 60

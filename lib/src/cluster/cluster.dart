@@ -11,7 +11,6 @@ import 'package:actor_system/src/cluster/messages/handshake.dart';
 import 'package:actor_system/src/cluster/node.dart';
 import 'package:actor_system/src/cluster/socket_adapter.dart';
 import 'package:actor_system/src/cluster/worker.dart';
-import 'package:actor_system/src/cluster/worker_adapter.dart';
 import 'package:logging/logging.dart';
 import 'package:stream_channel/isolate_channel.dart';
 import 'package:uuid/uuid.dart';
@@ -27,7 +26,7 @@ typedef AfterClusterInit = FutureOr<void> Function(
 
 /// Called to preprare the actor system on every worker of a node. Use this
 /// callback to register actor factories.
-typedef PrepareNodeSystem = FutureOr<void> Function(ActorSystem system);
+typedef PrepareNodeSystem = FutureOr<void> Function(void Function(Uri path, ActorFactory factory) registerFactory);
 
 enum NodeState {
   created,
@@ -40,9 +39,9 @@ class ActorCluster {
   final _log = Logger('ActorClusterNode');
   final _uuid = Uuid().v4();
   final _remoteNodes = <String, RemoteNode>{};
-  final _workerAdapters = <IsolateAdapter>[];
   final String _configName;
   late final Config _config;
+  late final LocalNode _localNode;
   AfterClusterInit? _afterClusterInit;
   PrepareNodeSystem? _prepareNodeSystem;
   NodeState _state = NodeState.created;
@@ -80,6 +79,7 @@ class ActorCluster {
     _log.info('init | workers: ${_config.workers}');
     _log.info('init | secret: ${'*' * _config.secret.length}');
     _log.info('init | logLevel: ${_config.logLevel}');
+    _log.info('init | timeout: ${_config.timeout}');
     _log.info('init | node uuid: ${_uuid}');
 
     // set log level
@@ -141,8 +141,7 @@ class ActorCluster {
   Future<void> _handleNewConnection(Socket socket) async {
     final timeout = 3;
     _log.info('handleNewConnection < socket=${socket.address}');
-    final timer = Timer(Duration(seconds: timeout),
-        () => _handleTimedOutConnection(timeout, socket));
+    final timer = Timer(Duration(seconds: timeout), () => _handleTimedOutConnection(timeout, socket));
     try {
       final socketAdapter = SocketAdapter(socket);
       final message = await socketAdapter.receiveData();
@@ -152,8 +151,7 @@ class ActorCluster {
 
       // check message type
       if (message.type != handshakeRequestType) {
-        throw StateError(
-            'invalid handshake message type. message type=${message.type}');
+        throw StateError('invalid handshake message type. message type=${message.type}');
       }
 
       // read message content
@@ -178,15 +176,12 @@ class ActorCluster {
       }
 
       // check for seed node
-      if (!_missingSeedNodes()
-          .map((e) => e.id)
-          .contains(handshakeRequest.nodeId)) {
+      if (!_missingSeedNodes().map((e) => e.id).contains(handshakeRequest.nodeId)) {
         throw StateError('not a seed node');
       }
 
       // listen to socket close
-      socketAdapter.onClose =
-          () => _handleClosedConnection(handshakeRequest.nodeId);
+      socketAdapter.onClose = () => _handleClosedConnection(handshakeRequest.nodeId);
 
       // send handshake response
       await socketAdapter.sendMessage(SocketMessage(
@@ -223,8 +218,7 @@ class ActorCluster {
   }
 
   void _handleTimedOutConnection(int timeout, Socket socket) {
-    _log.info(
-        'handleTimedOutConnection < timeout=$timeout, socket=${socket.addressToString()}');
+    _log.info('handleTimedOutConnection < timeout=$timeout, socket=${socket.addressToString()}');
     _log.info('handleTimedOutConnection | closing socket...');
     socket.destroy();
     _log.info('handleTimedOutConnection | socket closed');
@@ -237,8 +231,7 @@ class ActorCluster {
     if (_hasMissingSeedNodes()) {
       _startConnectingToMissingNodes();
     }
-    _log.info(
-        'handleClosedConnection | remote node for nodeId=$nodeId removed');
+    _log.info('handleClosedConnection | remote node for nodeId=$nodeId removed');
     _log.info('handleClosedConnection >');
   }
 
@@ -248,8 +241,7 @@ class ActorCluster {
         .where((node) => !_remoteNodes.containsKey(node.id))
         .where((node) => node.id != _config.localNode.id)
         .toList();
-    _log.info(
-        'connectToSeedNodes | missingNodes=${missingNodes.map((e) => e.id).toList()}');
+    _log.info('connectToSeedNodes | missingNodes=${missingNodes.map((e) => e.id).toList()}');
     for (final node in missingNodes) {
       Socket? socketToClose;
       try {
@@ -288,14 +280,12 @@ class ActorCluster {
 
         // check correlation id
         if (handshakeResponse.correlationId != correlationId) {
-          throw StateError(
-              'invalid handshake response correlation id (${handshakeResponse.correlationId})');
+          throw StateError('invalid handshake response correlation id (${handshakeResponse.correlationId})');
         }
 
         // check node id
         if (handshakeResponse.nodeId != node.id) {
-          throw StateError(
-              'invalid handshake response node id (${handshakeResponse.nodeId})');
+          throw StateError('invalid handshake response node id (${handshakeResponse.nodeId})');
         }
 
         // check uuid
@@ -381,11 +371,7 @@ class ActorCluster {
 
   Future<void> _stopWorkers() async {
     _log.info('stopWorkers <');
-    for (final workerAdaper in _workerAdapters) {
-      await workerAdaper.stop();
-      _log.info('stopWorkers | worker ${workerAdaper.workerId} stopped');
-    }
-    _workerAdapters.clear();
+    await _localNode.stopWorkers();
     _log.info('stopWorkers >');
   }
 
@@ -394,6 +380,7 @@ class ActorCluster {
     _stopConnectingToMissingNodes();
     _log.info('startNode | state is ${_state.name}');
     if (_state != NodeState.started) {
+      _localNode = LocalNode(_config.localNode.id, _uuid, _remoteNodes);
       for (var workerId = 1; workerId <= _config.workers; workerId++) {
         final receivePort = ReceivePort();
         final isolate = await Isolate.spawn<WorkerBootstrapMsg>(
@@ -401,17 +388,14 @@ class ActorCluster {
           WorkerBootstrapMsg(
             _config.localNode.id,
             workerId,
+            _config.logLevel.toLogLevel(),
             _prepareNodeSystem,
             receivePort.sendPort,
           ),
-          debugName: '${_config.localNode.id}:$workerId',
+          debugName: '${_config.localNode.id}_$workerId',
         );
-        _workerAdapters.add(IsolateAdapter(
-          _config.localNode.id,
-          workerId,
-          isolate,
-          IsolateChannel<IsolateMessage>.connectReceive(receivePort),
-        ));
+        _localNode.addWorker(
+            workerId, isolate, IsolateChannel.connectReceive(receivePort), Duration(seconds: _config.timeout));
       }
       _log.info('startNode | ${_config.workers} worker(s) started');
 
@@ -420,23 +404,12 @@ class ActorCluster {
       if (_afterClusterInit != null) {
         _log.info('startNode | calling afterInit callback...');
         try {
-          await _afterClusterInit?.call(
-              createContext([
-                LocalNode(
-                  _config.localNode.id,
-                  _uuid,
-                  _config.workers,
-                  _workerAdapters,
-                ),
-                ..._remoteNodes.values,
-              ]),
-              isLeader);
+          await _afterClusterInit?.call(createClusterContext(_localNode), isLeader);
           _log.info('startNode | returned from afterInit callback');
           _state = NodeState.started;
           _log.info('startNode | set state to ${_state.name}');
         } catch (e) {
-          _log.info(
-              'startNode | returned from afterInit callback with error: $e');
+          _log.info('startNode | returned from afterInit callback with error: $e');
           shutdown();
         }
       }

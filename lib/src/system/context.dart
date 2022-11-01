@@ -2,6 +2,7 @@ import 'package:actor_system/src/base/reference.dart';
 import 'package:actor_system/src/base/uri.dart';
 import 'package:actor_system/src/system/actor.dart';
 import 'package:actor_system/src/system/ref.dart';
+import 'package:uuid/uuid.dart';
 
 /// Defines the handling of an actor path if the host part is missing.
 enum MissingHostHandling {
@@ -62,21 +63,23 @@ abstract class BaseContext {
     Uri path, {
     ActorFactory? factory,
     int? mailboxSize,
-    bool useExistingActor = false,
+    bool? useExistingActor,
   }) async {
     if (!path.hasAbsolutePath) {
       throw ArgumentError.value(path, 'path', 'must be an absolte uri!');
     }
     if (mailboxSize != null && mailboxSize <= 0) {
-      throw ArgumentError.value(
-          mailboxSize, 'mailboxSize', 'must be greater than zero!');
+      throw ArgumentError.value(mailboxSize, 'mailboxSize', 'must be greater than zero!');
     }
+
+    final defaultMailboxSize = 1000;
+    final defaultUseExisting = false;
 
     /// check if the actor must be ctreated externally
     if (!_isLocalPath(path)) {
       final externalCreate = _externalCreate.value;
       if (externalCreate != null) {
-        return externalCreate(path);
+        return externalCreate(path, mailboxSize ?? defaultMailboxSize, useExistingActor ?? defaultUseExisting);
       }
       throw StateError('No external actor create function registered!');
     }
@@ -85,7 +88,7 @@ abstract class BaseContext {
       // path does not end with a slash (/). is the path already in use?
       final existing = _actorRefs[path];
       if (existing != null) {
-        if (useExistingActor) {
+        if (useExistingActor ?? defaultUseExisting) {
           return existing;
         } else {
           throw ArgumentError.value(path.path, 'path', 'path already in use!');
@@ -100,10 +103,10 @@ abstract class BaseContext {
     }
 
     // create, store and return the actor ref
-    final actorPath = path.completeActorPath(_actorRefs.keys);
+    final actorPath = _finalActorPath(path);
     final actorRef = createActorRef(
         actorPath,
-        mailboxSize ?? 1000,
+        mailboxSize ?? defaultMailboxSize,
         await actorFactory(actorPath),
         actorFactory,
         ActorContext._(
@@ -114,7 +117,9 @@ abstract class BaseContext {
           _externalCreate,
           _externalLookup,
         ));
-    _actorRefs[actorPath.path] = actorRef;
+    if (_isLocalPath(path)) {
+      _actorRefs[actorPath.path] = actorRef;
+    }
 
     return actorRef;
   }
@@ -133,6 +138,18 @@ abstract class BaseContext {
       return _missingHostHandling == MissingHostHandling.asLocal;
     }
     return path.host == localSystem || path.host.toLowerCase() == _name;
+  }
+
+  Uri _finalActorPath(Uri path) {
+    if (path.pathSegments.last.isNotEmpty) {
+      return actorPath(path.path, system: path.host.isNotEmpty ? path.host : _name);
+    } else {
+      var result = actorPath(path.resolve(Uuid().v4()).path, system: _name);
+      while (_actorRefs.keys.contains(result.path)) {
+        result = path.resolve(Uuid().v4());
+      }
+      return result;
+    }
   }
 }
 
@@ -164,9 +181,7 @@ class ActorContext extends BaseContext {
 /// other. An actor can only create or lookup actors in the same [ActorSystem].
 class ActorSystem extends BaseContext {
   /// Creates a new [ActorSystem].
-  ActorSystem(
-      {String name = localSystem,
-      MissingHostHandling missingHostHandling = MissingHostHandling.asLocal})
+  ActorSystem({String name = localSystem, MissingHostHandling missingHostHandling = MissingHostHandling.asLocal})
       : super(
           name.toLowerCase(),
           missingHostHandling,
@@ -185,11 +200,9 @@ class ActorSystem extends BaseContext {
 
   /// Sets the external create function. This function is used to create actors
   /// outside of the current [ActorSystem].
-  set externalCreate(ExternalActorCreate? create) =>
-      _externalCreate.value = create;
+  set externalCreate(ExternalActorCreate? create) => _externalCreate.value = create;
 
   /// Sets the external lookup function. This function is used to lookup actors
   /// outside of the current [ActorSystem].
-  set externalLookup(ExternalActorLookup? lookup) =>
-      _externalLookup.value = lookup;
+  set externalLookup(ExternalActorLookup? lookup) => _externalLookup.value = lookup;
 }

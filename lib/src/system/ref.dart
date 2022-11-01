@@ -3,11 +3,11 @@ import 'dart:collection';
 import 'package:actor_system/src/system/actor.dart';
 import 'package:actor_system/src/system/context.dart';
 
-class Envelope {
+class ActorMessageEnvelope {
   final Object? message;
   final ActorRef? replyTo;
 
-  Envelope(this.message, this.replyTo);
+  ActorMessageEnvelope(this.message, this.replyTo);
 }
 
 /// A reference to an actor. The only way to communicate with an actor is to
@@ -15,7 +15,7 @@ class Envelope {
 class ActorRef {
   final Uri path;
   final int _maxMailBoxSize;
-  final Queue<Envelope> _mailbox = Queue();
+  final Queue<ActorMessageEnvelope> _mailbox = Queue();
   final ActorFactory _factory;
   final ActorContext _context;
   Actor _actor;
@@ -50,7 +50,7 @@ class ActorRef {
     if (_mailbox.length >= _maxMailBoxSize) {
       throw Exception('mailbox is full! max size is $_maxMailBoxSize.');
     }
-    _mailbox.addLast(Envelope(message, replyTo));
+    _mailbox.addLast(ActorMessageEnvelope(message, replyTo));
     _handleMessage();
 
     // message was added to mailbox

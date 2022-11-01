@@ -18,6 +18,7 @@ class Config {
   final int workers;
   final String secret;
   final String logLevel;
+  final int timeout;
 
   Config(
     this.seedNodes,
@@ -25,6 +26,7 @@ class Config {
     this.workers,
     this.secret,
     this.logLevel,
+    this.timeout,
   );
 }
 
@@ -33,9 +35,7 @@ Future<Config> readConfig({String configName = 'config'}) async {
   final YamlMap config = loadYaml(yaml);
 
   return Config(
-    (config['seedNodes'] as YamlList)
-        .map((e) => ConfigNode(e['host'], e['port'], e['id']))
-        .toList(),
+    (config['seedNodes'] as YamlList).map((e) => ConfigNode(e['host'], e['port'], e['id'])).toList(),
     ConfigNode(
       config['localNode']['host'],
       config['localNode']['port'],
@@ -44,5 +44,6 @@ Future<Config> readConfig({String configName = 'config'}) async {
     config['workers'],
     config['secret'],
     config['logLevel'],
+    config['timeout'],
   );
 }
