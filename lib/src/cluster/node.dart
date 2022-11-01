@@ -31,6 +31,8 @@ abstract class Node {
     int? mailboxSize,
     bool? useExistingActor,
   );
+
+  Future<ActorRef?> lookupActor(Uri path);
 }
 
 class LocalNode extends Node {
@@ -86,6 +88,36 @@ class LocalNode extends Node {
       );
     }
     throw Exception('worker with id $workerId not found for node $nodeId');
+  }
+
+  @override
+  Future<ActorRef?> lookupActor(Uri path) async {
+    final nodeId = _getNodeId(path.host);
+    final workerId = _getWorkerId(path.host);
+
+    if (nodeId.isNotEmpty && nodeId != this.nodeId) {
+      throw ArgumentError.value(path.host, 'nodeId', 'inter-node actors are not supported yet');
+    }
+
+    final workerAdapter = _workerAdapters[workerId];
+
+    if (workerAdapter != null) {
+      return workerAdapter.protocol.lookupActor(actorPath(
+        path.path,
+        system: systemName(workerAdapter.nodeId, workerAdapter.workerId),
+      ));
+    } else {
+      for (final workerAdapter in _workerAdapters.values) {
+        final actorRef = await workerAdapter.protocol.lookupActor(actorPath(
+          path.path,
+          system: systemName(workerAdapter.nodeId, workerAdapter.workerId),
+        ));
+        if (actorRef != null) {
+          return actorRef;
+        }
+      }
+      return null;
+    }
   }
 
   Future<void> stopWorkers() async {
@@ -193,6 +225,11 @@ class RemoteNode extends Node {
     int? mailboxSize,
     bool? useExistingActor,
   ) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<ActorRef?> lookupActor(Uri path) {
     throw UnimplementedError();
   }
 }

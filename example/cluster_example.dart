@@ -19,22 +19,23 @@ void main(List<String> args) async {
         return (ActorContext context, Object? msg) async {
           final log = Logger(context.current.path.toString());
           final actorRef = await context.lookupActor(Uri.parse('/bar'));
-          log.info('${context.current.path} - forwarding message to ${actorRef?.path}');
+          log.info('forwarding message to ${actorRef?.path}');
           actorRef?.send(msg);
         };
       });
       registerFactory(Uri.parse('/bar'), (path) {
         return (ActorContext context, Object? msg) {
           final log = Logger(context.current.path.toString());
-          log.info('${context.current.path} - received message: $msg');
+          log.info('received message: $msg');
         };
       });
     },
     afterClusterInit: (context, isLeader) async {
       if (isLeader) {
-        final actorRef1 = await context.createActor(Uri.parse('/foo'));
+        await context.createActor(Uri.parse('/foo'));
         await context.createActor(Uri.parse('/bar'));
-        await actorRef1.send('hello cluster actor!');
+        final actorRef = await context.lookupActor(Uri.parse('/foo'));
+        await actorRef?.send('hello cluster actor!');
       }
     },
   );

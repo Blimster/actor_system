@@ -113,7 +113,7 @@ class ActorCluster {
 
     // wait for new connections
     serverSocket.listen(_handleNewConnection);
-    _log.info('init | server socket bound and waiting for connections...');
+    _log.info('init | server socket bound and waiting for connections');
 
     // periodically connect to other seed nodes
     if (_hasMissingSeedNodes()) {

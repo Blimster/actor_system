@@ -20,13 +20,13 @@ class ClusterContext implements BaseContext {
     bool? useExistingActor,
   }) {
     assert(factory == null, 'factory is always ignored in cluster mode');
-    
+
     return _localNode.createActor(path, mailboxSize, useExistingActor);
   }
 
   @override
   Future<ActorRef?> lookupActor(Uri path) {
-    throw UnimplementedError();
+    return _localNode.lookupActor(path);
   }
 }
 
