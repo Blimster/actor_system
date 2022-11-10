@@ -9,6 +9,7 @@ localNode:
   host: "localhost"
   port: 8003
   id: node3
-workers: 1
+workers: 2
+timeout: 60
 secret: "s3cr3t"
-logLevel: "ALL"
+logLevel: "INFO"

@@ -18,42 +18,39 @@ class SocketMessage {
 }
 
 class SocketAdapter {
-  final Socket _socket;
-  final Stream<Uint8List> _stream;
-  late StreamReader _streamReader;
+  final Socket socket;
+  final StreamReader streamReader;
 
-  SocketAdapter(this._socket) : _stream = _socket.asBroadcastStream() {
-    _streamReader = StreamReader(_stream);
+  SocketAdapter(this.socket) : streamReader = StreamReader(socket);
+
+  void bind({Function? onError, void onDone()?, bool? cancelOnError}) {
+    streamReader.bind(onError: onError, onDone: onDone, cancelOnError: cancelOnError);
   }
 
   Future<void> sendMessage(SocketMessage message) async {
     final type = utf8.encode(message.type);
     final content = utf8.encode(message.content);
 
-    _socket.add([
+    socket.add([
       ..._serializeSize(type.length),
       ...type,
       ..._serializeSize(content.length),
       ...content,
     ]);
-    await _socket.flush();
+    await socket.flush();
     return null;
   }
 
   Future<SocketMessage> receiveData() async {
-    final type = await _streamReader.receiveData();
-    final content = await _streamReader.receiveData();
+    final type = await streamReader.receiveData();
+    final content = await streamReader.receiveData();
     return SocketMessage(
       utf8.decode(type),
       utf8.decode(content),
     );
   }
 
-  set onClose(void Function() onClose) {
-    _stream.listen(null, onDone: onClose);
-  }
-
   void close() {
-    _socket.destroy();
+    socket.destroy();
   }
 }

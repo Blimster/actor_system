@@ -9,6 +9,7 @@ import 'package:actor_system/src/cluster/config.dart';
 import 'package:actor_system/src/cluster/context.dart';
 import 'package:actor_system/src/cluster/messages/handshake.dart';
 import 'package:actor_system/src/cluster/node.dart';
+import 'package:actor_system/src/cluster/ser_des.dart';
 import 'package:actor_system/src/cluster/socket_adapter.dart';
 import 'package:actor_system/src/cluster/worker.dart';
 import 'package:logging/logging.dart';
@@ -35,11 +36,22 @@ enum NodeState {
   stopped,
 }
 
+class ClosedConnectionHandler {
+  final void Function(String?) handleClosedConnection;
+  String? nodeId;
+
+  ClosedConnectionHandler(this.handleClosedConnection);
+
+  void call() {
+    handleClosedConnection(nodeId);
+  }
+}
+
 class ActorCluster {
   final _log = Logger('ActorClusterNode');
   final _uuid = Uuid().v4();
-  final _remoteNodes = <String, RemoteNode>{};
   final String _configName;
+  final SerDes _serDes;
   late final Config _config;
   late final LocalNode _localNode;
   AfterClusterInit? _afterClusterInit;
@@ -48,7 +60,7 @@ class ActorCluster {
   ServerSocket? _serverSocket;
   Timer? _connectTimer;
 
-  ActorCluster(this._configName);
+  ActorCluster(this._configName, this._serDes);
 
   NodeState get state => _state;
 
@@ -103,6 +115,8 @@ class ActorCluster {
       );
     }
 
+    _localNode = LocalNode(_serDes, _config.localNode.id, _uuid);
+
     // bind server socket
     _log.info('init | binding server socket to ${_config.localNode}...');
     final serverSocket = await ServerSocket.bind(
@@ -143,7 +157,10 @@ class ActorCluster {
     _log.info('handleNewConnection < socket=${socket.address}');
     final timer = Timer(Duration(seconds: timeout), () => _handleTimedOutConnection(timeout, socket));
     try {
+      final closedConnectionHandler = ClosedConnectionHandler(_handleClosedConnection);
       final socketAdapter = SocketAdapter(socket);
+      socketAdapter.bind(onDone: closedConnectionHandler);
+
       final message = await socketAdapter.receiveData();
 
       // received a message, cancel the timer
@@ -166,7 +183,7 @@ class ActorCluster {
       _log.info('handleNewConnection | nodeId=${handshakeRequest.nodeId}');
 
       // check if node is already connected
-      if (_remoteNodes.containsKey(handshakeRequest.nodeId)) {
+      if (_localNode.isConnected(handshakeRequest.nodeId)) {
         throw StateError('node already connected');
       }
 
@@ -180,9 +197,6 @@ class ActorCluster {
         throw StateError('not a seed node');
       }
 
-      // listen to socket close
-      socketAdapter.onClose = () => _handleClosedConnection(handshakeRequest.nodeId);
-
       // send handshake response
       await socketAdapter.sendMessage(SocketMessage(
         handshakeResponseType,
@@ -194,22 +208,32 @@ class ActorCluster {
         ).toJson(),
       ));
 
-      // store connection
-      _addRemoteNode(
+      if (!_localNode.isConnected(handshakeRequest.nodeId)) {
+        // store connection
+        _localNode.addRemoteNode(
           handshakeRequest.nodeId,
-          RemoteNode(
-            handshakeRequest.nodeId,
-            handshakeRequest.uuid,
-            handshakeRequest.workers,
-            socketAdapter,
-          ));
+          handshakeRequest.uuid,
+          handshakeRequest.workers,
+          socketAdapter.streamReader,
+          socketAdapter.socket,
+          Duration(seconds: _config.timeout),
+        );
+
+        // handle closed connection
+        closedConnectionHandler.nodeId = handshakeRequest.nodeId;
+      } else {
+        _log.info('handleNewConnection | remote node already present. closing socket...');
+        socket.destroy();
+        _log.info('handleNewConnection | socket closed');
+      }
 
       if (!_hasMissingSeedNodes()) {
         await _startNode();
       }
-    } catch (e) {
+    } catch (e, s) {
       timer.cancel();
-      _log.info('handleNewConnection | error: $e');
+      _log.info('handleNewConnection | $e');
+      _log.info('handleNewConnection | $s');
       _log.info('handleNewConnection | closing socket...');
       socket.destroy();
       _log.info('handleNewConnection | socket closed');
@@ -225,31 +249,32 @@ class ActorCluster {
     _log.info('handleTimedOutConnection >');
   }
 
-  void _handleClosedConnection(String nodeId) {
+  void _handleClosedConnection(String? nodeId) {
     _log.info('handleClosedConnection < nodeId=$nodeId');
-    _remoteNodes.remove(nodeId);
+    if (nodeId != null) {
+      _localNode.removeRemoteNode(nodeId);
+      _log.info('handleClosedConnection | remote node for nodeId=$nodeId removed');
+    }
     if (_hasMissingSeedNodes()) {
       _startConnectingToMissingNodes();
     }
-    _log.info('handleClosedConnection | remote node for nodeId=$nodeId removed');
     _log.info('handleClosedConnection >');
   }
 
   Future<void> _connectToSeedNodes() async {
     _log.info('connectToSeedNodes <');
-    final missingNodes = _config.seedNodes
-        .where((node) => !_remoteNodes.containsKey(node.id))
-        .where((node) => node.id != _config.localNode.id)
-        .toList();
-    _log.info('connectToSeedNodes | missingNodes=${missingNodes.map((e) => e.id).toList()}');
-    for (final node in missingNodes) {
+    final missingSeedNodes = _missingSeedNodes();
+    _log.info('connectToSeedNodes | missingSeedNodes=${missingSeedNodes.map((e) => e.id).toList()}');
+    for (final node in missingSeedNodes) {
       Socket? socketToClose;
       try {
         _log.info('connectToSeedNodes | trying to connect to node ${node.id}');
 
         // open socket connection
+        final closedConnectionHandler = ClosedConnectionHandler(_handleClosedConnection);
         final socket = await Socket.connect(node.host, node.port);
         final socketAdapter = SocketAdapter(socket);
+        socketAdapter.bind(onDone: closedConnectionHandler);
         socketToClose = socket;
         _log.info('connectToSeedNodes | connection established');
 
@@ -293,18 +318,22 @@ class ActorCluster {
           throw StateError('remote node has same uuid');
         }
 
-        // remove connection on closed socket
-        socketAdapter.onClose = () => _handleClosedConnection(node.id);
-
         // store connection
-        _addRemoteNode(
+        if (!_localNode.isConnected(handshakeResponse.nodeId)) {
+          _localNode.addRemoteNode(
             handshakeResponse.nodeId,
-            RemoteNode(
-              handshakeResponse.nodeId,
-              handshakeResponse.uuid,
-              handshakeResponse.workers,
-              socketAdapter,
-            ));
+            handshakeResponse.uuid,
+            handshakeResponse.workers,
+            socketAdapter.streamReader,
+            socketAdapter.socket,
+            Duration(seconds: _config.timeout),
+          );
+          closedConnectionHandler.nodeId = handshakeResponse.nodeId;
+        } else {
+          _log.info('connectToSeedNodes | remote node already present. closing socket...');
+          socket.destroy();
+          _log.info('connectToSeedNodes | socket closed');
+        }
       } catch (e) {
         _log.info('connectToSeedNodes | error: $e');
         _log.info('connectToSeedNodes | closing socket...');
@@ -321,24 +350,10 @@ class ActorCluster {
     _log.info('connectToSeedNodes >');
   }
 
-  void _addRemoteNode(String nodeId, RemoteNode connection) {
-    _log.info('addRemoteNode < nodeId=$nodeId');
-    if (_remoteNodes.containsKey(nodeId)) {
-      _log.warning('addRemoteNode | remote node for already exists');
-      _log.info('addRemoteNode | closing socket...');
-      connection.socketAdapter.close();
-      _log.info('addRemoteNode | socket closed');
-    } else {
-      _remoteNodes[nodeId] = connection;
-      _log.info('addRemoteNode | remote node added');
-    }
-    _log.info('addRemoteNode >');
-  }
-
   List<ConfigNode> _missingSeedNodes() {
     return _config.seedNodes
-        .where((node) => !_remoteNodes.containsKey(node.id))
         .where((node) => node.id != _config.localNode.id)
+        .where((node) => !_localNode.isConnected(node.id))
         .toList();
   }
 
@@ -347,7 +362,7 @@ class ActorCluster {
   }
 
   bool _isLeader() {
-    final remoteUuids = _remoteNodes.values.map((e) => e.uuid).toList()..sort();
+    final remoteUuids = _localNode.remoteUuids();
     if (remoteUuids.isEmpty) {
       return true;
     }
@@ -380,7 +395,6 @@ class ActorCluster {
     _stopConnectingToMissingNodes();
     _log.info('startNode | state is ${_state.name}');
     if (_state != NodeState.started) {
-      _localNode = LocalNode(_config.localNode.id, _uuid, _remoteNodes);
       for (var workerId = 1; workerId <= _config.workers; workerId++) {
         final receivePort = ReceivePort();
         final isolate = await Isolate.spawn<WorkerBootstrapMsg>(
@@ -389,7 +403,9 @@ class ActorCluster {
             _config.localNode.id,
             workerId,
             _config.logLevel.toLogLevel(),
+            _config.timeout,
             _prepareNodeSystem,
+            _serDes,
             receivePort.sendPort,
           ),
           debugName: '${_config.localNode.id}_$workerId',

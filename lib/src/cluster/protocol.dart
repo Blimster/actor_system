@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:actor_system/src/cluster/messages/create_actor.dart';
 import 'package:actor_system/src/cluster/messages/lookup_actor.dart';
 import 'package:actor_system/src/cluster/messages/send_message.dart';
 import 'package:actor_system/src/cluster/ref_proxy.dart';
+import 'package:actor_system/src/cluster/ser_des.dart';
 import 'package:actor_system/src/system/ref.dart';
 import 'package:logging/logging.dart';
 import 'package:stream_channel/stream_channel.dart';
@@ -18,11 +20,15 @@ enum ProtocolMessageType {
   response,
 }
 
+abstract class PackableData {
+  Uint8List pack();
+}
+
 class ProtocolMessage {
   final ProtocolMessageType type;
   final String name;
   final String correlationId;
-  final Object data;
+  final PackableData data;
 
   ProtocolMessage(this.type, this.name, this.correlationId, this.data);
 
@@ -43,6 +49,7 @@ class Protocol {
   final Logger _log;
   final Map<String, _PendingResponse> _pendingResponses = {};
   final StreamChannel<ProtocolMessage> _channel;
+  final SerDes _serDes;
   final Duration _timeout;
   final Future<CreateActorResponse> Function(Uri path, int? mailboxSize, bool? useExistingActor) _handleCreateActor;
   final Future<LookupActorResponse> Function(Uri path) _handleLookupActor;
@@ -51,6 +58,7 @@ class Protocol {
   Protocol(
     String id,
     this._channel,
+    this._serDes,
     this._timeout,
     this._handleCreateActor,
     this._handleLookupActor,
@@ -106,7 +114,7 @@ class Protocol {
       ProtocolMessageType.request,
       sendMessageMessageName,
       Uuid().v4(),
-      SendMessageRequest(path, message, replyTo),
+      SendMessageRequest(path, message, replyTo, _serDes),
     );
 
     final completer = Completer<void>();
@@ -210,7 +218,7 @@ class Protocol {
     if (pendingResponse != null && !pendingResponse.completer.isCompleted) {
       pendingResponse.completer.completeError(TimeoutException(
         'timeout waiting for response',
-        const Duration(seconds: 5),
+        _timeout,
       ));
     }
   }

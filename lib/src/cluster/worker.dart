@@ -1,14 +1,16 @@
 import 'dart:isolate';
 
-import 'package:actor_system/actor_system.dart';
 import 'package:actor_system/src/base/string.dart';
+import 'package:actor_system/src/base/uri.dart';
 import 'package:actor_system/src/cluster/base.dart';
 import 'package:actor_system/src/cluster/cluster.dart';
 import 'package:actor_system/src/cluster/messages/create_actor.dart';
 import 'package:actor_system/src/cluster/messages/lookup_actor.dart';
 import 'package:actor_system/src/cluster/messages/send_message.dart';
 import 'package:actor_system/src/cluster/protocol.dart';
+import 'package:actor_system/src/cluster/ser_des.dart';
 import 'package:actor_system/src/system/context.dart';
+import 'package:actor_system/src/system/ref.dart';
 import 'package:logging/logging.dart';
 import 'package:stream_channel/isolate_channel.dart';
 
@@ -16,14 +18,18 @@ class WorkerBootstrapMsg {
   final String nodeId;
   final int workerId;
   final Level logLevel;
+  final int timeout;
   final PrepareNodeSystem? prepareNodeSystem;
+  final SerDes serDes;
   final SendPort sendPort;
 
   WorkerBootstrapMsg(
     this.nodeId,
     this.workerId,
     this.logLevel,
+    this.timeout,
     this.prepareNodeSystem,
+    this.serDes,
     this.sendPort,
   );
 }
@@ -33,6 +39,7 @@ class Worker {
   final int workerId;
   final ActorSystem actorSystem;
   final IsolateChannel<ProtocolMessage> channel;
+  final SerDes serDes;
   final PrepareNodeSystem? prepareNodeSystem;
   late final Protocol protocol;
 
@@ -41,12 +48,15 @@ class Worker {
     this.workerId,
     this.actorSystem,
     this.channel,
+    this.serDes,
     this.prepareNodeSystem,
+    Duration timeout,
   ) {
     protocol = Protocol(
       'worker',
       channel,
-      Duration(seconds: 5),
+      serDes,
+      timeout,
       _handleCreateActor,
       _handleLookupActor,
       _handleSendMessage,
@@ -60,7 +70,7 @@ class Worker {
         mailboxSize: mailboxSize,
         useExistingActor: useExistingActor,
       );
-      return CreateActorResponse(true, actorRef.path.path);
+      return CreateActorResponse(true, actorRef.path.toString());
     } catch (e) {
       return CreateActorResponse(false, e.toString());
     }
@@ -133,7 +143,9 @@ Future<void> bootstrapWorker(WorkerBootstrapMsg message) async {
     message.workerId,
     actorSystem,
     isolateChannel,
+    message.serDes,
     message.prepareNodeSystem,
+    Duration(seconds: message.timeout),
   );
   await worker.start();
 }

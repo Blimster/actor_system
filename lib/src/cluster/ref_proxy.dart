@@ -17,4 +17,7 @@ class ActorRefProxy implements ActorRef {
   Future<void> send(Object? message, {ActorRef? replyTo}) {
     return _send(_path, message, replyTo?.path);
   }
+
+  @override
+  String toString() => 'ActorRefProxy(path=$path)';
 }

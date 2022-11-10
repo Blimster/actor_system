@@ -10,17 +10,15 @@ Future<int> _deserializeSize(StreamReader reader) async {
 }
 
 class StreamReader {
+  final Stream<List<int>> _stream;
   final _controller = StreamController<void>.broadcast();
   final RingBuffer _buffer;
   bool _done = false;
 
-  StreamReader(Stream<Uint8List> stream,
-      {int bufferSize = 1024 * 1024, void Function()? onDone})
-      : _buffer = RingBuffer(bufferSize) {
-    stream.listen(_onData, onDone: _onDone);
-  }
+  StreamReader(this._stream, {int bufferSize = 1024 * 1024, void Function()? onDone})
+      : _buffer = RingBuffer(bufferSize);
 
-  void _onData(Uint8List data) {
+  void _onData(List<int> data) {
     _buffer.addAll(data);
     _controller.add(null);
   }
@@ -28,6 +26,18 @@ class StreamReader {
   void _onDone() {
     _done = true;
     _controller.add(null);
+  }
+
+  StreamSubscription<List<int>> bind({Function? onError, void onDone()?, bool? cancelOnError}) {
+    return _stream.listen(
+      _onData,
+      onDone: () {
+        _onDone();
+        onDone?.call();
+      },
+      onError: onError,
+      cancelOnError: cancelOnError,
+    );
   }
 
   Future<Uint8List> _takeCount(int count) {
