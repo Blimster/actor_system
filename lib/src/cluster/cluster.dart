@@ -27,7 +27,8 @@ typedef AfterClusterInit = FutureOr<void> Function(
 
 /// Called to preprare the actor system on every worker of a node. Use this
 /// callback to register actor factories.
-typedef PrepareNodeSystem = FutureOr<void> Function(void Function(Uri path, ActorFactory factory) registerFactory);
+typedef PrepareNodeSystem = FutureOr<void> Function(
+    void Function(Pattern pattern, ActorFactory factory) registerFactory);
 
 enum NodeState {
   created,

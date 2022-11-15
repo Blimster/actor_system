@@ -10,17 +10,16 @@ void main() async {
         print('current : ${context.current.path}');
         print('replyTo : ${context.replyTo?.path}');
         print('received: $message');
-        final actor =
-            await context.lookupActor(Uri.parse('actor://host/foo/bar/2'));
+        final actor = await context.lookupActor(Uri.parse('/foo/bar/2'));
         actor?.send('reply to $message', replyTo: context.current);
       };
     },
   );
 
   await system.createActor(
-    Uri.parse('actor://host/foo/bar/2'),
+    Uri.parse('/foo/bar/2'),
     factory: (path) {
-      return (context, message) {
+      return (ActorContext context, Object? message) {
         print('current : ${context.current.path}');
         print('replyTo : ${context.replyTo?.path}');
         print('received: $message');

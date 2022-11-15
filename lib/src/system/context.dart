@@ -2,6 +2,7 @@ import 'package:actor_system/src/base/reference.dart';
 import 'package:actor_system/src/base/uri.dart';
 import 'package:actor_system/src/system/actor.dart';
 import 'package:actor_system/src/system/ref.dart';
+import 'package:logging/logging.dart';
 import 'package:uuid/uuid.dart';
 
 /// Defines the handling of an actor path if the host part is missing.
@@ -24,10 +25,11 @@ void prepareContext(
 }
 
 abstract class BaseContext {
+  final Logger _log;
   final String _name;
   final MissingHostHandling _missingHostHandling;
   final Map<String, ActorRef> _actorRefs;
-  final Map<String, ActorFactory> _factories;
+  final Map<Pattern, ActorFactory> _factories;
   NullableRef<ExternalActorCreate> _externalCreate;
   NullableRef<ExternalActorLookup> _externalLookup;
   ActorRef? _current;
@@ -40,7 +42,7 @@ abstract class BaseContext {
     this._factories,
     this._externalCreate,
     this._externalLookup,
-  );
+  ) : _log = Logger('BaseContext:${_name}');
 
   /// Creates an actor at the given path.
   ///
@@ -65,6 +67,9 @@ abstract class BaseContext {
     int? mailboxSize,
     bool? useExistingActor,
   }) async {
+    _log.info(
+        'createActor < path=$path, factory=${factory != null}, mailboxSize=$mailboxSize, useExistingActor=$useExistingActor');
+
     if (!path.hasAbsolutePath) {
       throw ArgumentError.value(path, 'path', 'must be an absolte uri!');
     }
@@ -75,20 +80,26 @@ abstract class BaseContext {
     final defaultMailboxSize = 1000;
     final defaultUseExisting = false;
 
-    /// check if the actor must be ctreated externally
+    /// check if the actor must be created externally
     if (!_isLocalPath(path)) {
+      _log.fine('createActor | path is an external path');
       final externalCreate = _externalCreate.value;
       if (externalCreate != null) {
-        return externalCreate(path, mailboxSize ?? defaultMailboxSize, useExistingActor ?? defaultUseExisting);
+        final result = externalCreate(path, mailboxSize ?? defaultMailboxSize, useExistingActor ?? defaultUseExisting);
+        _log.fine('createActor > $result');
+        return result;
       }
       throw StateError('No external actor create function registered!');
     }
+    _log.fine('createActor | path is a local path');
 
     if (path.pathSegments.last.isNotEmpty) {
       // path does not end with a slash (/). is the path already in use?
       final existing = _actorRefs[path];
       if (existing != null) {
+        _log.fine('createActor | found existing actor');
         if (useExistingActor ?? defaultUseExisting) {
+          _log.fine('createActor > $existing');
           return existing;
         } else {
           throw ArgumentError.value(path.path, 'path', 'path already in use!');
@@ -97,13 +108,14 @@ abstract class BaseContext {
     }
 
     // search for registered factory if no factory is provided
-    final actorFactory = factory ?? _factories[path.path];
+    final actorFactory = factory ?? _findFactory(path.path);
     if (actorFactory == null) {
       throw ArgumentError.value(path.path, 'path', 'no factory for path!');
     }
 
     // create, store and return the actor ref
     final actorPath = _finalActorPath(path);
+    _log.fine('createActor | final path is $actorPath');
     final actorRef = createActorRef(
         actorPath,
         mailboxSize ?? defaultMailboxSize,
@@ -121,16 +133,37 @@ abstract class BaseContext {
       _actorRefs[actorPath.path] = actorRef;
     }
 
+    _log.info('createActor > $actorRef');
     return actorRef;
   }
 
   /// Looks up an actor reference using the given path. If no actor exists for
   /// that path, null is returned.
   Future<ActorRef?> lookupActor(Uri path) async {
+    _log.info('lookupActor < path=$path');
     if (_isLocalPath(path)) {
-      return _actorRefs[path.path];
+      _log.info('lookupActor | path is a local path');
+      final result = _actorRefs[path.path];
+      _log.info('lookupActor > $result');
+      return result;
     }
-    return _externalLookup.value?.call(path);
+    final result = await _externalLookup.value?.call(path);
+    _log.info('lookupActor > $result');
+    return result;
+  }
+
+  ActorFactory? _findFactory(String path) {
+    _log.fine('_findFactory < path=$path');
+    for (final entry in _factories.entries) {
+      final matches = entry.key.allMatches(path);
+      if (matches.isNotEmpty) {
+        _log.fine('_findFactory | factory found with pattern ${entry.key}');
+        _log.fine('_findFactory > ActorFactory');
+        return entry.value;
+      }
+    }
+    _log.fine('_findFactory > null');
+    return null;
   }
 
   bool _isLocalPath(Uri path) {
@@ -194,8 +227,8 @@ class ActorSystem extends BaseContext {
   /// Registers an [ActorFactory] for the given [path]. The factory is used to
   /// create a new actor if a call to [ActorContext.createActor] has no factory
   /// and the path matches.
-  void registerFactory(Uri path, ActorFactory factory) {
-    _factories[path.path] = factory;
+  void registerFactory(Pattern pattern, ActorFactory factory) {
+    _factories[pattern] = factory;
   }
 
   /// Sets the external create function. This function is used to create actors

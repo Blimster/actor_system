@@ -32,7 +32,7 @@ void main(List<String> args) async {
   final clusterNode = await ActorCluster(args[0], StringDerDes());
   await clusterNode.init(
     prepareNodeSystem: (registerFactory) {
-      registerFactory(Uri.parse('/foo'), (path) {
+      registerFactory('/foo', (path) {
         return (ActorContext context, Object? msg) async {
           final log = Logger(context.current.path.toString());
           final actorRef = await context.lookupActor(Uri.parse('/bar'));
@@ -41,7 +41,7 @@ void main(List<String> args) async {
           actorRef?.send(msg);
         };
       });
-      registerFactory(Uri.parse('/bar'), (path) {
+      registerFactory('/bar', (path) {
         return (ActorContext context, Object? msg) {
           final log = Logger(context.current.path.toString());
           log.info('received message: $msg');

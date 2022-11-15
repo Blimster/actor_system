@@ -38,11 +38,11 @@ void main() async {
 
   system1.externalCreate = externalCreate;
   system1.externalLookup = externalLookup;
-  system1.registerFactory(Uri.parse('/actor'), factory);
+  system1.registerFactory('/actor', factory);
 
   system2.externalCreate = externalCreate;
   system2.externalLookup = externalLookup;
-  system2.registerFactory(Uri.parse('/actor'), factory);
+  system2.registerFactory('/actor', factory);
 
   await system1.createActor(
     Uri.parse('//system2/actor'),

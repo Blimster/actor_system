@@ -74,6 +74,9 @@ class ActorRef {
       }
     });
   }
+
+  @override
+  String toString() => 'ActorRef(path=$path)';
 }
 
 ActorRef createActorRef(
