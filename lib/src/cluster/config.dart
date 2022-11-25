@@ -17,7 +17,6 @@ class Config {
   final ConfigNode localNode;
   final int workers;
   final String secret;
-  final String logLevel;
   final int timeout;
 
   Config(
@@ -25,13 +24,12 @@ class Config {
     this.localNode,
     this.workers,
     this.secret,
-    this.logLevel,
     this.timeout,
   );
 }
 
-Future<Config> readConfig({String configName = 'config'}) async {
-  final yaml = await File('$configName.yaml').readAsString();
+Future<Config> readConfigFromYaml(String filename) async {
+  final yaml = await File('$filename').readAsString();
   final YamlMap config = loadYaml(yaml);
 
   return Config(
@@ -43,7 +41,6 @@ Future<Config> readConfig({String configName = 'config'}) async {
     ),
     config['workers'],
     config['secret'],
-    config['logLevel'],
     config['timeout'],
   );
 }

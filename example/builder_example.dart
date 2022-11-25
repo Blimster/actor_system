@@ -1,3 +1,4 @@
+import 'package:actor_system/actor_builder.dart';
 import 'package:actor_system/actor_system.dart';
 
 class MessageA {
@@ -25,9 +26,9 @@ Actor actorFactory(Uri path) {
   }
 
   // build the actor using type based message handlers
-  return TypeBasedMessageActorBuilder()
-      .handler(handleA) //
-      .handler(handleB) //
+  return WhenLikeActorBuilder()
+      .isType<MessageA>(handleA) //
+      .isType<MessageB>(handleB) //
       .actor();
 }
 

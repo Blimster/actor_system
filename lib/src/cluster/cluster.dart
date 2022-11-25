@@ -4,7 +4,6 @@ import 'dart:isolate';
 
 import 'package:actor_system/actor_system.dart';
 import 'package:actor_system/src/base/socket.dart';
-import 'package:actor_system/src/base/string.dart';
 import 'package:actor_system/src/cluster/config.dart';
 import 'package:actor_system/src/cluster/context.dart';
 import 'package:actor_system/src/cluster/messages/handshake.dart';
@@ -51,9 +50,10 @@ class ClosedConnectionHandler {
 class ActorCluster {
   final _log = Logger('ActorClusterNode');
   final _uuid = Uuid().v4();
-  final String _configName;
   final SerDes _serDes;
-  late final Config _config;
+  final Config _config;
+  final Level? _logLevel;
+  final void Function(LogRecord)? _onLogRecord;
   late final LocalNode _localNode;
   AfterClusterInit? _afterClusterInit;
   PrepareNodeSystem? _prepareNodeSystem;
@@ -61,7 +61,11 @@ class ActorCluster {
   ServerSocket? _serverSocket;
   Timer? _connectTimer;
 
-  ActorCluster(this._configName, this._serDes);
+  ActorCluster(Config config, SerDes serDes, {Level? logLevel, void Function(LogRecord)? onLogRecord})
+      : this._config = config,
+        this._serDes = serDes,
+        this._logLevel = logLevel,
+        this._onLogRecord = onLogRecord;
 
   NodeState get state => _state;
 
@@ -83,21 +87,13 @@ class ActorCluster {
     _log.info('init | set state to ${_state.name}');
 
     // read config
-    _log.info('init | loading config with name $_configName...');
-    _config = await readConfig(configName: _configName);
-    _log.info('init | config loaded');
-
-    _log.info('init | seedNodes: ${_config.seedNodes}');
-    _log.info('init | localNode: ${_config.localNode}');
-    _log.info('init | workers: ${_config.workers}');
-    _log.info('init | secret: ${'*' * _config.secret.length}');
-    _log.info('init | logLevel: ${_config.logLevel}');
-    _log.info('init | timeout: ${_config.timeout}');
-    _log.info('init | node uuid: ${_uuid}');
-
-    // set log level
-    _log.info('init | configure log level');
-    Logger.root.level = _config.logLevel.toLogLevel();
+    _log.info('init | configuration entries:');
+    _log.info('init | - seedNodes: ${_config.seedNodes}');
+    _log.info('init | - localNode: ${_config.localNode}');
+    _log.info('init | - workers: ${_config.workers}');
+    _log.info('init | - secret: ${'*' * _config.secret.length}');
+    _log.info('init | - timeout: ${_config.timeout}');
+    _log.info('init | - node uuid: ${_uuid}');
 
     // validate config
     if (_config.localNode.id == localSystem) {
@@ -403,11 +399,12 @@ class ActorCluster {
           WorkerBootstrapMsg(
             _config.localNode.id,
             workerId,
-            _config.logLevel.toLogLevel(),
             _config.timeout,
             _prepareNodeSystem,
             _serDes,
             receivePort.sendPort,
+            _logLevel,
+            _onLogRecord,
           ),
           debugName: '${_config.localNode.id}_$workerId',
         );

@@ -1,6 +1,5 @@
 import 'dart:isolate';
 
-import 'package:actor_system/src/base/string.dart';
 import 'package:actor_system/src/base/uri.dart';
 import 'package:actor_system/src/cluster/base.dart';
 import 'package:actor_system/src/cluster/cluster.dart';
@@ -17,20 +16,22 @@ import 'package:stream_channel/isolate_channel.dart';
 class WorkerBootstrapMsg {
   final String nodeId;
   final int workerId;
-  final Level logLevel;
   final int timeout;
   final PrepareNodeSystem? prepareNodeSystem;
   final SerDes serDes;
   final SendPort sendPort;
+  final Level? logLevel;
+  final void Function(LogRecord)? onLogRecord;
 
   WorkerBootstrapMsg(
     this.nodeId,
     this.workerId,
-    this.logLevel,
     this.timeout,
     this.prepareNodeSystem,
     this.serDes,
     this.sendPort,
+    this.logLevel,
+    this.onLogRecord,
   );
 }
 
@@ -120,11 +121,12 @@ class Worker {
 }
 
 Future<void> bootstrapWorker(WorkerBootstrapMsg message) async {
-  Logger.root.level = message.logLevel;
-  Logger.root.onRecord.listen((record) {
-    print(
-        '[${record.time.toString().padRight(26, '0')}|${record.level.name.padLeft(7, ' ')}|${Isolate.current.debugName?.abbreviate(10).padLeft(10)}|${record.loggerName.abbreviate(20).padLeft(20)}] ${record.message}');
-  });
+  if (message.logLevel != null) {
+    Logger.root.level = message.logLevel;
+  }
+  if (message.onLogRecord != null) {
+    Logger.root.onRecord.listen(message.onLogRecord);
+  }
 
   final receivePort = ReceivePort('${message.nodeId}:${message.workerId}');
   message.sendPort.send(receivePort.sendPort);
