@@ -2,7 +2,7 @@
 
 ## 0.1.1
 
-- Changes dependency to support 
+- Changed dependency from `msgpack_dart` to `msgpack_dart_with_web` to support web
 
 ## 0.1.0
 
