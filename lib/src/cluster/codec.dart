@@ -7,7 +7,7 @@ import 'package:actor_system/src/cluster/messages/send_message.dart';
 import 'package:actor_system/src/cluster/protocol.dart';
 import 'package:actor_system/src/cluster/ser_des.dart';
 import 'package:actor_system/src/cluster/stream_reader.dart';
-import 'package:msgpack_dart/msgpack_dart.dart';
+import 'package:msgpack_dart_with_web/msgpack_dart_with_web.dart';
 import 'package:stream_channel/stream_channel.dart';
 
 PackableData _createMessage(ProtocolMessageType messageType, String messageName, Uint8List messageData, SerDes serDes) {

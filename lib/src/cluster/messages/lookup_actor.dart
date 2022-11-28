@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:actor_system/src/cluster/protocol.dart';
-import 'package:msgpack_dart/msgpack_dart.dart';
+import 'package:msgpack_dart_with_web/msgpack_dart_with_web.dart';
 
 class LookupActorRequest implements PackableData {
   final Uri path;
