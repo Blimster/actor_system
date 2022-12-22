@@ -319,7 +319,7 @@ class LocalNode extends Node {
       }
       final actorRef = await remoteNode.protocol
           .lookupActor(actorPath(path.path, system: systemName(nodeIdFromPath, workerIdFromPath)));
-      final result = await LookupActorResponse(actorRef?.path);
+      final result = LookupActorResponse(actorRef?.path);
       _log.fine('handleLookupActor > $result');
       return result;
     } else {
