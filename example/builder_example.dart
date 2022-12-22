@@ -25,10 +25,20 @@ Actor actorFactory(Uri path) {
     print('handleA: ${message.payloadB}');
   }
 
-  // build the actor using type based message handlers
+  void handleFoo(_, String message) {
+    print('expected: foo, received: $message');
+  }
+
+  void handleDefault(_, Object? message) {
+    print('dflt: $message');
+  }
+
+  // build the actor
   return WhenLikeActorBuilder()
-      .isType<MessageA>(handleA) //
-      .isType<MessageB>(handleB) //
+      .isEqual('foo', handleFoo)
+      .isType<MessageA>(handleA)
+      .isType<MessageB>(handleB)
+      .deflt(handleDefault)
       .actor();
 }
 
@@ -36,7 +46,7 @@ void main() async {
   // create the actor system
   final system = ActorSystem();
 
-  // create an actor using
+  // create an actor
   final actor = await system.createActor(
     Uri(path: '/test/1'),
     factory: actorFactory,

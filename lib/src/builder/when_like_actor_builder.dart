@@ -15,16 +15,22 @@ class WhenLikeActorBuilder {
   final List<_Condition> _conditions = [];
   Actor? _defaultActor;
 
-  WhenLikeActorBuilder equals(Object? message, Actor actor) {
-    _conditions.add(_Condition((m) => m == message, actor));
+  WhenLikeActorBuilder isEqual<T>(T message, FutureOr<void> Function(ActorContext, T) actor) {
+    _conditions.add(_Condition(
+      (m) => m == message,
+      (context, message) => actor(context, message as T),
+    ));
     return this;
   }
 
   WhenLikeActorBuilder isType<T>(FutureOr<void> Function(ActorContext, T) actor) {
     final type = TypeOf<T>().get();
-    _conditions.add(_Condition((m) {
-      return m.runtimeType == type;
-    }, (context, message) => actor(context, message as T)));
+    _conditions.add(_Condition(
+      (m) {
+        return m.runtimeType == type;
+      },
+      (context, message) => actor(context, message as T),
+    ));
     return this;
   }
 

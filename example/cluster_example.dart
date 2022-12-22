@@ -39,7 +39,6 @@ void main(List<String> args) async {
         return (ActorContext context, Object? msg) async {
           final log = Logger(context.current.path.toString());
           final actorRef = await context.lookupActor(Uri.parse('/bar'));
-          //final actorRef = await context.createActor(Uri.parse('//node3_1/bar'));
           log.info('forwarding message to ${actorRef?.path}');
           actorRef?.send(msg);
         };
