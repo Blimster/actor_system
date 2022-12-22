@@ -30,19 +30,19 @@ abstract class BaseContext {
   final MissingHostHandling _missingHostHandling;
   final Map<String, ActorRef> _actorRefs;
   final Map<Pattern, ActorFactory> _factories;
-  NullableRef<ExternalActorCreate> _externalCreate;
-  NullableRef<ExternalActorLookup> _externalLookup;
+  final NullableRef<ExternalActorCreate> _externalCreate;
+  final NullableRef<ExternalActorLookup> _externalLookup;
   ActorRef? _current;
   ActorRef? _replyTo;
 
-  BaseContext(
+  BaseContext._(
     this._name,
     this._missingHostHandling,
     this._actorRefs,
     this._factories,
     this._externalCreate,
     this._externalLookup,
-  ) : _log = Logger('BaseContext:${_name}');
+  ) : _log = Logger('BaseContext:$_name');
 
   /// Creates an actor at the given path.
   ///
@@ -189,13 +189,20 @@ abstract class BaseContext {
 /// A context for an actor. The context is provided to the actor for
 class ActorContext extends BaseContext {
   ActorContext._(
-    super.name,
-    super._missingHostHandling,
-    super._actorRefs,
-    super._factories,
-    super._externalCreate,
-    super._externalLookup,
-  );
+    String name,
+    MissingHostHandling missingHostHandling,
+    Map<String, ActorRef> actorRefs,
+    Map<Pattern, ActorFactory> factories,
+    NullableRef<ExternalActorCreate> externalCreate,
+    NullableRef<ExternalActorLookup> externalLookup,
+  ) : super._(
+          name,
+          missingHostHandling,
+          actorRefs,
+          factories,
+          externalCreate,
+          externalLookup,
+        );
 
   /// The current reference.
   ActorRef get current {
@@ -215,7 +222,7 @@ class ActorContext extends BaseContext {
 class ActorSystem extends BaseContext {
   /// Creates a new [ActorSystem].
   ActorSystem({String name = localSystem, MissingHostHandling missingHostHandling = MissingHostHandling.asLocal})
-      : super(
+      : super._(
           name.toLowerCase(),
           missingHostHandling,
           {},

@@ -62,10 +62,10 @@ class ActorCluster {
   Timer? _connectTimer;
 
   ActorCluster(Config config, SerDes serDes, {Level? logLevel, void Function(LogRecord)? onLogRecord})
-      : this._config = config,
-        this._serDes = serDes,
-        this._logLevel = logLevel,
-        this._onLogRecord = onLogRecord;
+      : _config = config,
+        _serDes = serDes,
+        _logLevel = logLevel,
+        _onLogRecord = onLogRecord;
 
   NodeState get state => _state;
 
@@ -93,7 +93,7 @@ class ActorCluster {
     _log.info('init | - workers: ${_config.workers}');
     _log.info('init | - secret: ${'*' * _config.secret.length}');
     _log.info('init | - timeout: ${_config.timeout}');
-    _log.info('init | - node uuid: ${_uuid}');
+    _log.info('init | - node uuid: $_uuid');
 
     // validate config
     if (_config.localNode.id == localSystem) {

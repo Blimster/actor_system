@@ -60,7 +60,7 @@ class ActorRef {
 
     // message was added to mailbox
     _log.info('send > null');
-    return null;
+    return;
   }
 
   void _handleMessage() {

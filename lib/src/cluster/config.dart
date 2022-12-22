@@ -9,6 +9,7 @@ class ConfigNode {
 
   ConfigNode(this.host, this.port, this.id);
 
+  @override
   String toString() => 'adress=$host:$port, id=$id';
 }
 
@@ -29,7 +30,7 @@ class Config {
 }
 
 Future<Config> readConfigFromYaml(String filename) async {
-  final yaml = await File('$filename').readAsString();
+  final yaml = await File(filename).readAsString();
   final YamlMap config = loadYaml(yaml);
 
   return Config(

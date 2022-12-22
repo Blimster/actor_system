@@ -3,7 +3,7 @@ import 'package:actor_system/actor_system.dart';
 Actor actorFactory(Uri path) {
   int calls = 0;
 
-  return (_, Object? msg) {
+  return (_, Object? msg) async {
     calls++;
     print('$calls: $msg');
     if (msg == 'sync error') {
@@ -11,11 +11,12 @@ Actor actorFactory(Uri path) {
       // a new instance is created. thus, the state is resetted and the next.
       throw StateError('some sync error');
     } else if (msg == 'async error') {
-      return Future(() {
+      await Future(() {
+        // an error in an async call
         throw StateError('some async error');
       });
     }
-    return null;
+    return;
   };
 }
 

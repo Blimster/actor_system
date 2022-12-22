@@ -19,6 +19,7 @@ class CreateActorRequest implements PackableData {
     );
   }
 
+  @override
   Uint8List pack() {
     final serializer = Serializer();
     serializer.encode(path.toString());
@@ -45,6 +46,7 @@ class CreateActorResponse implements PackableData {
     );
   }
 
+  @override
   Uint8List pack() {
     final serializer = Serializer();
     serializer.encode(success);

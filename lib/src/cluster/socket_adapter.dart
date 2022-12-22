@@ -23,7 +23,7 @@ class SocketAdapter {
 
   SocketAdapter(this.socket) : streamReader = StreamReader(socket);
 
-  void bind({Function? onError, void onDone()?, bool? cancelOnError}) {
+  void bind({Function? onError, void Function()? onDone, bool? cancelOnError}) {
     streamReader.bind(onError: onError, onDone: onDone, cancelOnError: cancelOnError);
   }
 
@@ -38,7 +38,7 @@ class SocketAdapter {
       ...content,
     ]);
     await socket.flush();
-    return null;
+    return;
   }
 
   Future<SocketMessage> receiveData() async {

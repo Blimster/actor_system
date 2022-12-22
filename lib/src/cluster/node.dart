@@ -124,7 +124,7 @@ class LocalNode extends Node {
     _log.fine(
         'createActor | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath, selectedNode=$selectedNodeId');
 
-    if (selectedNodeId != this.nodeId) {
+    if (selectedNodeId != nodeId) {
       _log.fine('createActor | remote node selected or referenced by path');
       final remoteNode = _remoteNodes[selectedNodeId];
       if (remoteNode == null) {
@@ -410,6 +410,7 @@ class LocalNode extends Node {
 }
 
 class RemoteNode extends Node {
+  @override
   final int workers;
   final Protocol protocol;
 

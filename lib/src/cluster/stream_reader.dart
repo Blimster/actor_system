@@ -28,7 +28,7 @@ class StreamReader {
     _controller.add(null);
   }
 
-  StreamSubscription<List<int>> bind({Function? onError, void onDone()?, bool? cancelOnError}) {
+  StreamSubscription<List<int>> bind({Function? onError, void Function()? onDone, bool? cancelOnError}) {
     return _stream.listen(
       _onData,
       onDone: () {
@@ -51,8 +51,8 @@ class StreamReader {
         completer.completeError(StateError('Stream closed'));
         return;
       }
-      final dataLength = min(this._buffer.length, count - index);
-      buffer.setAll(index, this._buffer.read(dataLength));
+      final dataLength = min(_buffer.length, count - index);
+      buffer.setAll(index, _buffer.read(dataLength));
       index += dataLength;
       if (index == count) {
         subscription.cancel();
