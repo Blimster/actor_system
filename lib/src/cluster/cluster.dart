@@ -48,7 +48,7 @@ class ClosedConnectionHandler {
 }
 
 class ActorCluster {
-  final _log = Logger('ActorClusterNode');
+  final _log = Logger('actor_system.cluster.ActorClusterNode');
   final _uuid = Uuid().v4();
   final SerDes _serDes;
   final Config _config;

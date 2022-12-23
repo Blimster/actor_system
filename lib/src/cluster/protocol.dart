@@ -63,7 +63,7 @@ class Protocol {
     this._handleCreateActor,
     this._handleLookupActor,
     this._handleSendMessage,
-  ) : _log = Logger('Protocol:$id') {
+  ) : _log = Logger('actor_system.cluster.Protocol:$id') {
     _channel.stream.listen(_onMessage);
   }
 

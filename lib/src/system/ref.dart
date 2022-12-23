@@ -29,7 +29,7 @@ class ActorRef {
     this._actor,
     this._factory,
     this._context,
-  ) : _log = Logger('ActorRef:${path.toString()}');
+  ) : _log = Logger('actor_system.system.ActorRef:${path.toString()}');
 
   /// Sends a message to the actor referenced by this
   /// [ActorRef]. It is guaranteed, that an actor processes

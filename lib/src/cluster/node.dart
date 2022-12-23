@@ -44,7 +44,7 @@ class LocalNode extends Node {
   final Map<int, _WorkerAdapter> _workerAdapters = {};
   final Map<String, RemoteNode> _remoteNodes = {};
 
-  LocalNode(this._serDes, super.nodeId, super.uuid) : _log = Logger('LocalNode:$nodeId');
+  LocalNode(this._serDes, super.nodeId, super.uuid) : _log = Logger('actor_system.cluster.LocalNode:$nodeId');
 
   @override
   bool get isLocal => true;

@@ -42,7 +42,7 @@ abstract class BaseContext {
     this._factories,
     this._externalCreate,
     this._externalLookup,
-  ) : _log = Logger('BaseContext:$_name');
+  ) : _log = Logger('actor_system.system.BaseContext:$_name');
 
   /// Creates an actor at the given path.
   ///
