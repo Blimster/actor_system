@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.1
+
+- Prefixed all logger names in library `actor_system` with `actor_system.system.` and all logger names in library `actor_cluster` with `actor_system.cluster.`.
 ## 0.2.0
 
 - Improved package score on pub.dev
