@@ -1,4 +1,6 @@
-:warning: The package is under development. Breaking changes will happen very happen very often. The package has no tests yet.
+:warning: ALPHA :warning:
+
+This package is in early stage of development. Breaking changes will happen very often. The package has no tests yet.
 
 # Actor System
 
