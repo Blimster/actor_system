@@ -53,7 +53,7 @@ class Protocol {
   final Duration _timeout;
   final Future<CreateActorResponse> Function(Uri path, int? mailboxSize, bool? useExistingActor) _handleCreateActor;
   final Future<LookupActorResponse> Function(Uri path) _handleLookupActor;
-  final Future<SendMessageResponse> Function(Uri path, Object? message, Uri? replyTo) _handleSendMessage;
+  final Future<SendMessageResponse> Function(Uri path, Object? message, Uri? sender, Uri? replyTo) _handleSendMessage;
 
   Protocol(
     String id,
@@ -107,14 +107,14 @@ class Protocol {
     return completer.future;
   }
 
-  Future<void> sendMessage(Uri path, Object? message, Uri? replyTo) {
-    _log.fine('sendMessage < path=$path, message=$message, replyTo=$replyTo');
+  Future<void> sendMessage(Uri path, Object? message, Uri? sender, Uri? replyTo) {
+    _log.fine('sendMessage < path=$path, message=$message, sender=$sender, replyTo=$replyTo');
 
     final request = ProtocolMessage(
       ProtocolMessageType.request,
       sendMessageMessageName,
       Uuid().v4(),
-      SendMessageRequest(path, message, replyTo, _serDes),
+      SendMessageRequest(path, message, sender, replyTo, _serDes),
     );
 
     final completer = Completer<void>();
@@ -164,7 +164,7 @@ class Protocol {
               ProtocolMessageType.response,
               message.name,
               message.correlationId,
-              await _handleSendMessage(request.path, request.message, request.replyTo),
+              await _handleSendMessage(request.path, request.message, request.sender, request.replyTo),
             );
             _channel.sink.add(response);
             break;

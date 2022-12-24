@@ -363,7 +363,7 @@ class LocalNode extends Node {
     }
   }
 
-  Future<SendMessageResponse> _handleSendMessage(Uri path, Object? message, Uri? replyTo) async {
+  Future<SendMessageResponse> _handleSendMessage(Uri path, Object? message, Uri? sender, Uri? replyTo) async {
     final nodeIdFromPath = _getNodeId(path.host);
     final workerIdFromPath = _getWorkerId(path.host);
 
@@ -379,6 +379,7 @@ class LocalNode extends Node {
       await remoteNode.protocol.sendMessage(
         actorPath(path.path, system: systemName(nodeIdFromPath, workerIdFromPath)),
         message,
+        sender,
         replyTo,
       );
       return SendMessageResponse(true, '');
@@ -392,7 +393,7 @@ class LocalNode extends Node {
         return SendMessageResponse(false, 'worker not present');
       }
       try {
-        await workerAdapter.protocol.sendMessage(path, message, replyTo);
+        await workerAdapter.protocol.sendMessage(path, message, sender, replyTo);
         return SendMessageResponse(true, '');
       } catch (e) {
         return SendMessageResponse(false, e.toString());

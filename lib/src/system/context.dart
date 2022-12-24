@@ -18,9 +18,11 @@ enum MissingHostHandling {
 void prepareContext(
   ActorContext context,
   ActorRef current,
+  ActorRef? sender,
   ActorRef? replyTo,
 ) {
   context._current = current;
+  context._sender = sender;
   context._replyTo = replyTo;
 }
 
@@ -33,6 +35,7 @@ abstract class BaseContext {
   final NullableRef<ExternalActorCreate> _externalCreate;
   final NullableRef<ExternalActorLookup> _externalLookup;
   ActorRef? _current;
+  ActorRef? _sender;
   ActorRef? _replyTo;
 
   BaseContext._(
@@ -212,6 +215,9 @@ class ActorContext extends BaseContext {
     }
     throw StateError('No current actor reference!');
   }
+
+  /// The reference to the sender of the message.
+  ActorRef? get sender => _sender;
 
   /// The reference to the actor to reply to.
   ActorRef? get replyTo => _replyTo;

@@ -5,6 +5,7 @@ class ActorRefProxy implements ActorRef {
   final Future<void> Function(
     Uri path,
     Object? message,
+    Uri? sender,
     Uri? replyTo,
   ) _send;
 
@@ -14,8 +15,8 @@ class ActorRefProxy implements ActorRef {
   Uri get path => _path;
 
   @override
-  Future<void> send(Object? message, {ActorRef? replyTo}) {
-    return _send(_path, message, replyTo?.path);
+  Future<void> send(Object? message, {ActorRef? sender, ActorRef? replyTo}) {
+    return _send(_path, message, sender?.path, replyTo?.path);
   }
 
   @override

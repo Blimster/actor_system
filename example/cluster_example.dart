@@ -35,26 +35,35 @@ void main(List<String> args) async {
       ActorCluster(await readConfigFromYaml('${args[0]}.yaml'), StringDerDes(), onLogRecord: onLogRecord);
   await clusterNode.init(
     prepareNodeSystem: (registerFactory) {
-      registerFactory('/foo', (path) {
+      registerFactory('/actor/1', (path) {
         return (ActorContext context, Object? msg) async {
           final log = Logger(context.current.path.toString());
-          final actorRef = await context.lookupActor(Uri.parse('/bar'));
-          log.info('forwarding message to ${actorRef?.path}');
-          actorRef?.send(msg);
+          final target = await context.lookupActor(Uri.parse('/actor/2'));
+          final replyTo = await context.lookupActor(Uri.parse('/actor/3'));
+          log.info('forwarding message to ${target?.path}');
+          target?.send(msg, sender: context.current, replyTo: replyTo);
         };
       });
-      registerFactory('/bar', (path) {
+      registerFactory('/actor/2', (path) {
         return (ActorContext context, Object? msg) {
           final log = Logger(context.current.path.toString());
-          log.info('received message: $msg');
+          log.info('received message: $msg from ${context.sender?.path}');
+          context.replyTo?.send(msg, sender: context.current);
+        };
+      });
+      registerFactory('/actor/3', (path) {
+        return (ActorContext context, Object? msg) {
+          final log = Logger(context.current.path.toString());
+          log.info('received message: $msg from ${context.sender?.path}');
         };
       });
     },
     afterClusterInit: (context, isLeader) async {
       if (isLeader) {
-        await context.createActor(Uri.parse('/foo'));
-        await context.createActor(Uri.parse('/bar'));
-        final actorRef = await context.lookupActor(Uri.parse('/foo'));
+        await context.createActor(Uri.parse('//node2/actor/1'));
+        await context.createActor(Uri.parse('//node3/actor/2'));
+        await context.createActor(Uri.parse('//node2/actor/3'));
+        final actorRef = await context.lookupActor(Uri.parse('/actor/1'));
         await actorRef?.send('hello cluster actor!');
       }
     },
