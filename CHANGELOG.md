@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- `ActorRef.send()` now has a new parameter `sender`.
+
 ## 0.2.1
 
 - Prefixed all logger names in library `actor_system` with `actor_system.system.` and all logger names in library `actor_cluster` with `actor_system.cluster.`.
