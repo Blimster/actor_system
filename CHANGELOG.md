@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.4
+
+- `ActorRef.send()` now has a new parameter `correlationId`.
+- `WhenLikeActorBuilder` has a new method `isTrue()`.
+
 ## 0.2.2
 
 - `ActorRef.send()` now has a new parameter `sender`.

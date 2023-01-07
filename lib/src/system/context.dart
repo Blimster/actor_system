@@ -20,10 +20,12 @@ void prepareContext(
   ActorRef current,
   ActorRef? sender,
   ActorRef? replyTo,
+  String? correlationId,
 ) {
   context._current = current;
   context._sender = sender;
   context._replyTo = replyTo;
+  context._correlationId = correlationId;
 }
 
 abstract class BaseContext {
@@ -37,6 +39,7 @@ abstract class BaseContext {
   ActorRef? _current;
   ActorRef? _sender;
   ActorRef? _replyTo;
+  String? _correlationId;
 
   BaseContext._(
     this._name,
@@ -221,6 +224,9 @@ class ActorContext extends BaseContext {
 
   /// The reference to the actor to reply to.
   ActorRef? get replyTo => _replyTo;
+
+  /// The correlation id for this current message.
+  String? get correlationId => _correlationId;
 }
 
 /// An [ActorSystem] is a collection of actors, the can communicate with each

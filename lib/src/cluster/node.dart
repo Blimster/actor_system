@@ -363,7 +363,13 @@ class LocalNode extends Node {
     }
   }
 
-  Future<SendMessageResponse> _handleSendMessage(Uri path, Object? message, Uri? sender, Uri? replyTo) async {
+  Future<SendMessageResponse> _handleSendMessage(
+    Uri path,
+    Object? message,
+    Uri? sender,
+    Uri? replyTo,
+    String? correlationId,
+  ) async {
     final nodeIdFromPath = _getNodeId(path.host);
     final workerIdFromPath = _getWorkerId(path.host);
 
@@ -381,6 +387,7 @@ class LocalNode extends Node {
         message,
         sender,
         replyTo,
+        correlationId,
       );
       return SendMessageResponse(true, '');
     } else {
@@ -393,7 +400,7 @@ class LocalNode extends Node {
         return SendMessageResponse(false, 'worker not present');
       }
       try {
-        await workerAdapter.protocol.sendMessage(path, message, sender, replyTo);
+        await workerAdapter.protocol.sendMessage(path, message, sender, replyTo, correlationId);
         return SendMessageResponse(true, '');
       } catch (e) {
         return SendMessageResponse(false, e.toString());

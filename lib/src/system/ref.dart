@@ -8,8 +8,9 @@ class ActorMessageEnvelope {
   final Object? message;
   final ActorRef? sender;
   final ActorRef? replyTo;
+  final String? correlationId;
 
-  ActorMessageEnvelope(this.message, this.sender, this.replyTo);
+  ActorMessageEnvelope(this.message, this.sender, this.replyTo, this.correlationId);
 }
 
 /// A reference to an actor. The only way to communicate with an actor is to
@@ -49,14 +50,14 @@ class ActorRef {
   /// thrown away and recreated using the factory provided
   /// when the actor was created. The messages in mailbox
   /// of the actor remain.
-  Future<void> send(Object? message, {ActorRef? sender, ActorRef? replyTo}) async {
-    _log.info('send < message=${message?.runtimeType}, sender=$sender, replyTo=$replyTo');
+  Future<void> send(Object? message, {ActorRef? sender, ActorRef? replyTo, String? correlationId}) async {
+    _log.info('send < message=${message?.runtimeType}, sender=$sender, replyTo=$replyTo, correlationId=$correlationId');
     if (_mailbox.length >= _maxMailBoxSize) {
       throw Exception('mailbox is full! max size is $_maxMailBoxSize.');
     }
 
     _log.fine('send | adding message at position ${_mailbox.length}');
-    _mailbox.addLast(ActorMessageEnvelope(message, sender, replyTo));
+    _mailbox.addLast(ActorMessageEnvelope(message, sender, replyTo, correlationId));
     _handleMessage();
 
     // message was added to mailbox
@@ -72,7 +73,7 @@ class ActorRef {
         _isProcessing = true;
         try {
           final envelope = _mailbox.removeFirst();
-          prepareContext(_context, this, envelope.sender, envelope.replyTo);
+          prepareContext(_context, this, envelope.sender, envelope.replyTo, envelope.correlationId);
           _log.fine('handleMessage | calling actor with message of type ${envelope.message?.runtimeType}');
           await _actor(_context, envelope.message);
           _log.fine('handleMessage | back from actor call');

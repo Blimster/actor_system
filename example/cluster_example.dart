@@ -40,6 +40,7 @@ void main(List<String> args) async {
           final log = Logger(context.current.path.toString());
           final target = await context.lookupActor(Uri.parse('/actor/2'));
           final replyTo = await context.lookupActor(Uri.parse('/actor/3'));
+          log.info('correlationId ${context.correlationId}');
           log.info('forwarding message to ${target?.path}');
           target?.send(msg, sender: context.current, replyTo: replyTo);
         };
@@ -64,7 +65,7 @@ void main(List<String> args) async {
         await context.createActor(Uri.parse('//node3/actor/2'));
         await context.createActor(Uri.parse('//node2/actor/3'));
         final actorRef = await context.lookupActor(Uri.parse('/actor/1'));
-        await actorRef?.send('hello cluster actor!');
+        await actorRef?.send('hello cluster actor!', correlationId: '1910');
       }
     },
   );

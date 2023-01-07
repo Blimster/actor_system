@@ -82,7 +82,13 @@ class Worker {
     return LookupActorResponse(actorRef?.path);
   }
 
-  Future<SendMessageResponse> _handleSendMessage(Uri path, Object? message, Uri? sender, Uri? replyTo) async {
+  Future<SendMessageResponse> _handleSendMessage(
+    Uri path,
+    Object? message,
+    Uri? sender,
+    Uri? replyTo,
+    String? correlationId,
+  ) async {
     try {
       final actorRef = await actorSystem.lookupActor(path);
       if (actorRef == null) {
@@ -90,7 +96,7 @@ class Worker {
       }
       final senderActor = sender != null ? await actorSystem.lookupActor(sender) : null;
       final replyToActor = replyTo != null ? await actorSystem.lookupActor(replyTo) : null;
-      await actorRef.send(message, sender: senderActor, replyTo: replyToActor);
+      await actorRef.send(message, sender: senderActor, replyTo: replyToActor, correlationId: correlationId);
       return SendMessageResponse(true, '');
     } catch (e) {
       return SendMessageResponse(false, e.toString());

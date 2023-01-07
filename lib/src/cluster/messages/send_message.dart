@@ -9,9 +9,10 @@ class SendMessageRequest implements PackableData {
   final Object? message;
   final Uri? sender;
   final Uri? replyTo;
+  final String? correlationId;
   final SerDes serDes;
 
-  SendMessageRequest(this.path, this.message, this.sender, this.replyTo, this.serDes);
+  SendMessageRequest(this.path, this.message, this.sender, this.replyTo, this.correlationId, this.serDes);
 
   factory SendMessageRequest.unpack(Uint8List data, SerDes serDes) {
     final deserializer = Deserializer(data);
@@ -19,11 +20,13 @@ class SendMessageRequest implements PackableData {
     final Uint8List message = deserializer.decode();
     final String? sender = deserializer.decode();
     final String? replyTo = deserializer.decode();
+    final String? correlationId = deserializer.decode();
     return SendMessageRequest(
       Uri.parse(path),
       serDes.deserialize(message),
       sender != null ? Uri.parse(sender) : null,
       replyTo != null ? Uri.parse(replyTo) : null,
+      correlationId,
       serDes,
     );
   }
@@ -35,6 +38,7 @@ class SendMessageRequest implements PackableData {
     serializer.encode(serDes.serialize(message));
     serializer.encode(sender?.toString());
     serializer.encode(replyTo?.toString());
+    serializer.encode(correlationId?.toString());
     return serializer.takeBytes();
   }
 
