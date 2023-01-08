@@ -1,9 +1,11 @@
 # Changelog
 
-## 0.2.4
+## 0.3.0
 
-- `ActorRef.send()` now has a new parameter `correlationId`.
-- `WhenLikeActorBuilder` has a new method `isTrue()`.
+- BREAKING CHANGE: removed parameter `useExistingActor` from `BaseContext.createActor()`.
+- `BaseContext.createActor()` has a new parameter `sendInit`. If set to `true`, an `initMsg` is sent after the actor is created.
+- `ActorRef.send()` now has a new parameter `correlationId`. An actor can read the correlation id from its context.
+- `WhenLikeActorBuilder` has new methods `isTrue()` and `isInit()`.
 
 ## 0.2.2
 

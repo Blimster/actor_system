@@ -6,6 +6,7 @@ import 'package:actor_system/src/cluster/messages/lookup_actor.dart';
 import 'package:actor_system/src/cluster/messages/send_message.dart';
 import 'package:actor_system/src/cluster/ref_proxy.dart';
 import 'package:actor_system/src/cluster/ser_des.dart';
+import 'package:actor_system/src/system/actor.dart';
 import 'package:actor_system/src/system/ref.dart';
 import 'package:logging/logging.dart';
 import 'package:stream_channel/stream_channel.dart';
@@ -51,7 +52,7 @@ class Protocol {
   final StreamChannel<ProtocolMessage> _channel;
   final SerDes _serDes;
   final Duration _timeout;
-  final Future<CreateActorResponse> Function(Uri path, int? mailboxSize, bool? useExistingActor) _handleCreateActor;
+  final Future<CreateActorResponse> Function(Uri path, int? mailboxSize) _handleCreateActor;
   final Future<LookupActorResponse> Function(Uri path) _handleLookupActor;
   final Future<SendMessageResponse> Function(
       Uri path, Object? message, Uri? sender, Uri? replyTo, String? correlationId) _handleSendMessage;
@@ -68,14 +69,14 @@ class Protocol {
     _channel.stream.listen(_onMessage);
   }
 
-  Future<ActorRef> createActor(Uri path, int? mailboxSize, bool? useExistingActor) {
-    _log.fine('createActor < path=$path, mailboxSize=$mailboxSize, useExistingActor=$useExistingActor');
+  Future<ActorRef> createActor(Uri path, int? mailboxSize) {
+    _log.fine('createActor < path=$path, mailboxSize=$mailboxSize');
 
     final request = ProtocolMessage(
       ProtocolMessageType.request,
       createActorMessageName,
       Uuid().v4(),
-      CreateActorRequest(path, mailboxSize, useExistingActor),
+      CreateActorRequest(path, mailboxSize),
     );
 
     final completer = Completer<ActorRef>();
@@ -116,7 +117,15 @@ class Protocol {
       ProtocolMessageType.request,
       sendMessageMessageName,
       Uuid().v4(),
-      SendMessageRequest(path, message, sender, replyTo, correlationId, _serDes),
+      SendMessageRequest(
+        path,
+        message == initMsg ? MessageType.init : MessageType.payload,
+        message,
+        sender,
+        replyTo,
+        correlationId,
+        _serDes,
+      ),
     );
 
     final completer = Completer<void>();
@@ -146,7 +155,7 @@ class Protocol {
               ProtocolMessageType.response,
               message.name,
               message.correlationId,
-              await _handleCreateActor(request.path, request.mailboxSize, request.useExistingActor),
+              await _handleCreateActor(request.path, request.mailboxSize),
             );
             _channel.sink.add(response);
             break;

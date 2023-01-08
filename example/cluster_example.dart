@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:actor_system/actor_cluster.dart';
 import 'package:actor_system/actor_system.dart';
 import 'package:actor_system/src/base/string.dart';
+import 'package:actor_system/src/system/actor.dart';
 import 'package:logging/logging.dart';
 
 class StringDerDes implements SerDes {
@@ -38,11 +39,15 @@ void main(List<String> args) async {
       registerFactory('/actor/1', (path) {
         return (ActorContext context, Object? msg) async {
           final log = Logger(context.current.path.toString());
-          final target = await context.lookupActor(Uri.parse('/actor/2'));
-          final replyTo = await context.lookupActor(Uri.parse('/actor/3'));
-          log.info('correlationId ${context.correlationId}');
-          log.info('forwarding message to ${target?.path}');
-          target?.send(msg, sender: context.current, replyTo: replyTo);
+          if (msg == initMsg) {
+            log.info('received initMessage');
+          } else {
+            final target = await context.lookupActor(Uri.parse('/actor/2'));
+            final replyTo = await context.lookupActor(Uri.parse('/actor/3'));
+            log.info('correlationId ${context.correlationId}');
+            log.info('forwarding message to ${target?.path}');
+            target?.send(msg, sender: context.current, replyTo: replyTo);
+          }
         };
       });
       registerFactory('/actor/2', (path) {
@@ -61,7 +66,7 @@ void main(List<String> args) async {
     },
     afterClusterInit: (context, isLeader) async {
       if (isLeader) {
-        await context.createActor(Uri.parse('//node2/actor/1'));
+        await context.createActor(Uri.parse('//node2/actor/1'), sendInit: true);
         await context.createActor(Uri.parse('//node3/actor/2'));
         await context.createActor(Uri.parse('//node2/actor/3'));
         final actorRef = await context.lookupActor(Uri.parse('/actor/1'));

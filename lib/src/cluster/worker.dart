@@ -64,12 +64,11 @@ class Worker {
     );
   }
 
-  Future<CreateActorResponse> _handleCreateActor(Uri path, int? mailboxSize, bool? useExistingActor) async {
+  Future<CreateActorResponse> _handleCreateActor(Uri path, int? mailboxSize) async {
     try {
       final actorRef = await actorSystem.createActor(
         path,
         mailboxSize: mailboxSize,
-        useExistingActor: useExistingActor,
       );
       return CreateActorResponse(true, actorRef.path.toString());
     } catch (e) {
@@ -103,8 +102,8 @@ class Worker {
     }
   }
 
-  Future<ActorRef> _externalCreate(Uri path, int mailboxSize, bool useExistingActor) async {
-    return protocol.createActor(path, mailboxSize, useExistingActor);
+  Future<ActorRef> _externalCreate(Uri path, int mailboxSize) async {
+    return protocol.createActor(path, mailboxSize);
   }
 
   Future<ActorRef?> _externalLookup(Uri path) async {

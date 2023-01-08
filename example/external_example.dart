@@ -4,7 +4,7 @@ void main() async {
   final system1 = ActorSystem(name: 'system1');
   final system2 = ActorSystem(name: 'system2');
 
-  Future<ActorRef> externalCreate(Uri path, int mailboxSize, bool useExistingActor) {
+  Future<ActorRef> externalCreate(Uri path, int mailboxSize) {
     if (path.host == 'system1') {
       return system1.createActor(path);
     } else if (path.host == 'system2') {

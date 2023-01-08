@@ -17,7 +17,7 @@ class WhenLikeActorBuilder {
 
   WhenLikeActorBuilder isEqual<T>(T message, FutureOr<void> Function(ActorContext context, T message) actor) {
     _conditions.add(_Condition(
-      (m) => m == message,
+      (msg) => msg == message,
       (context, message) => actor(context, message as T),
     ));
     return this;
@@ -26,8 +26,8 @@ class WhenLikeActorBuilder {
   WhenLikeActorBuilder isType<T>(FutureOr<void> Function(ActorContext context, T message) actor) {
     final type = TypeOf<T>().get();
     _conditions.add(_Condition(
-      (m) {
-        return m.runtimeType == type;
+      (msg) {
+        return msg.runtimeType == type;
       },
       (context, message) => actor(context, message as T),
     ));
@@ -36,6 +36,11 @@ class WhenLikeActorBuilder {
 
   WhenLikeActorBuilder isTrue(bool Function(Object? message) predicate, Actor actor) {
     _conditions.add(_Condition(predicate, actor));
+    return this;
+  }
+
+  WhenLikeActorBuilder isInit(Actor actor) {
+    _conditions.add(_Condition((msg) => msg == initMsg, actor));
     return this;
   }
 

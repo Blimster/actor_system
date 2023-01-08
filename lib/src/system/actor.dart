@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:actor_system/src/system/ref.dart';
 import 'package:actor_system/src/system/context.dart';
+import 'package:actor_system/src/system/ref.dart';
 
 /// An actor is a function that processes messages. This function should never
 /// be called directly. It should only be used as a parameter to
@@ -16,7 +16,14 @@ typedef Actor = FutureOr<void> Function(ActorContext context, Object? message);
 typedef ActorFactory = FutureOr<Actor> Function(Uri path);
 
 /// Creates an actor for the given [Uri] outside of the current actor system.
-typedef ExternalActorCreate = FutureOr<ActorRef> Function(Uri path, int mailboxSize, bool useExisting);
+typedef ExternalActorCreate = FutureOr<ActorRef> Function(Uri path, int mailboxSize);
 
 /// Looks up an actor by the given [Uri] outside of the current actor system.
 typedef ExternalActorLookup = FutureOr<ActorRef?> Function(Uri path);
+
+/// A constant to be used to initialize an actor after it is created
+const initMsg = _InitMessage();
+
+class _InitMessage {
+  const _InitMessage();
+}

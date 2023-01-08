@@ -61,20 +61,15 @@ abstract class BaseContext {
   /// used. If such factory does not exists, an error is thrown. This factory
   /// will also be used to recreate the actor in case of an error.
   ///
-  /// If [useExistingActor] is set to true, the provided path ends not with a
-  /// slash and an actor with the path already exists, the existing actor is
-  /// returned instead a newly created actor.
-  ///
-  /// If [useExistingActor] is set to false and there is already an actor with
-  /// the given path, an error is thrown.
+  /// If [sendInit] is set to true, the const `initMessage` is sent to the
+  /// actors mailbox before the returned future completes.
   Future<ActorRef> createActor(
     Uri path, {
     ActorFactory? factory,
     int? mailboxSize,
-    bool? useExistingActor,
+    bool sendInit = false,
   }) async {
-    _log.info(
-        'createActor < path=$path, factory=${factory != null}, mailboxSize=$mailboxSize, useExistingActor=$useExistingActor');
+    _log.info('createActor < path=$path, factory=${factory != null}, mailboxSize=$mailboxSize, sendInit=$sendInit');
 
     if (!path.hasAbsolutePath) {
       throw ArgumentError.value(path, 'path', 'must be an absolte uri!');
@@ -84,14 +79,19 @@ abstract class BaseContext {
     }
 
     final defaultMailboxSize = 1000;
-    final defaultUseExisting = false;
 
     /// check if the actor must be created externally
     if (!_isLocalPath(path)) {
       _log.fine('createActor | path is an external path');
       final externalCreate = _externalCreate.value;
       if (externalCreate != null) {
-        final result = externalCreate(path, mailboxSize ?? defaultMailboxSize, useExistingActor ?? defaultUseExisting);
+        final result = await externalCreate(
+          path,
+          mailboxSize ?? defaultMailboxSize,
+        );
+        if (sendInit) {
+          await result.send(initMsg);
+        }
         _log.fine('createActor > $result');
         return result;
       }
@@ -104,12 +104,7 @@ abstract class BaseContext {
       final existing = _actorRefs[path];
       if (existing != null) {
         _log.fine('createActor | found existing actor');
-        if (useExistingActor ?? defaultUseExisting) {
-          _log.fine('createActor > $existing');
-          return existing;
-        } else {
-          throw ArgumentError.value(path.path, 'path', 'path already in use!');
-        }
+        throw ArgumentError.value(path.path, 'path', 'path already in use!');
       }
     }
 
@@ -137,6 +132,10 @@ abstract class BaseContext {
         ));
     if (_isLocalPath(path)) {
       _actorRefs[actorPath.path] = actorRef;
+    }
+
+    if (sendInit) {
+      await actorRef.send(initMsg);
     }
 
     _log.info('createActor > $actorRef');

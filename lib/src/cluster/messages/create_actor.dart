@@ -6,15 +6,13 @@ import 'package:msgpack_dart_with_web/msgpack_dart_with_web.dart';
 class CreateActorRequest implements PackableData {
   final Uri path;
   final int? mailboxSize;
-  final bool? useExistingActor;
 
-  CreateActorRequest(this.path, this.mailboxSize, this.useExistingActor);
+  CreateActorRequest(this.path, this.mailboxSize);
 
   factory CreateActorRequest.unpack(Uint8List data) {
     final deserializer = Deserializer(data);
     return CreateActorRequest(
       Uri.parse(deserializer.decode()),
-      deserializer.decode(),
       deserializer.decode(),
     );
   }
@@ -24,12 +22,11 @@ class CreateActorRequest implements PackableData {
     final serializer = Serializer();
     serializer.encode(path.toString());
     serializer.encode(mailboxSize);
-    serializer.encode(useExistingActor);
     return serializer.takeBytes();
   }
 
   @override
-  String toString() => 'CreateActorRequest(path=$path, mailboxSize=$mailboxSize, useExistingActor=$useExistingActor)';
+  String toString() => 'CreateActorRequest(path=$path, mailboxSize=$mailboxSize)';
 }
 
 class CreateActorResponse implements PackableData {

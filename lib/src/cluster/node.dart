@@ -134,7 +134,6 @@ class LocalNode extends Node {
       final result = await remoteNode.protocol.createActor(
         actorPath(path.path, system: systemName(selectedNodeId, workerIdFromPath)),
         mailboxSize,
-        useExistingActor,
       );
       _log.info('createActor > $result');
       return result;
@@ -150,7 +149,6 @@ class LocalNode extends Node {
       final result = await workerAdapter.protocol.createActor(
         actorPath(path.path, system: systemName(workerAdapter.nodeId, workerAdapter.workerId)),
         mailboxSize,
-        useExistingActor,
       );
       _log.info('createActor > $result');
       return result;
@@ -225,8 +223,8 @@ class LocalNode extends Node {
     _workerAdapters.clear();
   }
 
-  Future<CreateActorResponse> _handleCreateActor(Uri path, int? mailboxSize, bool? useExistingActor) async {
-    _log.info('handleCreateActor < path=$path, mailboxSize=$mailboxSize, useExistingActor=$useExistingActor');
+  Future<CreateActorResponse> _handleCreateActor(Uri path, int? mailboxSize) async {
+    _log.info('handleCreateActor < path=$path, mailboxSize=$mailboxSize');
 
     final nodeIdFromPath = _getNodeId(path.host);
     final workerIdFromPath = _getWorkerId(path.host);
@@ -247,7 +245,6 @@ class LocalNode extends Node {
         final result = await remoteNode.protocol.createActor(
           actorPath(path.path, system: systemName(selectedNodeId, workerIdFromPath)),
           mailboxSize,
-          useExistingActor,
         );
         _log.fine('handleCreateActor | actor created with path ${result.path}');
         return CreateActorResponse(true, result.path.toString());
@@ -272,7 +269,6 @@ class LocalNode extends Node {
         final actorRef = await workerAdapter.protocol.createActor(
           actorPath(path.path, system: systemName(selectedNodeId, selectedWorkerId)),
           mailboxSize,
-          useExistingActor,
         );
         final result = CreateActorResponse(true, actorRef.path.toString());
         _log.info('handleCreateActor > $result');
@@ -428,12 +424,8 @@ class RemoteNode extends Node {
   bool get isLocal => false;
 
   @override
-  Future<ActorRef> createActor(
-    Uri path,
-    int? mailboxSize,
-    bool? useExistingActor,
-  ) {
-    return protocol.createActor(path, mailboxSize, useExistingActor);
+  Future<ActorRef> createActor(Uri path, int? mailboxSize, bool? useExistingActor) {
+    return protocol.createActor(path, mailboxSize);
   }
 
   @override

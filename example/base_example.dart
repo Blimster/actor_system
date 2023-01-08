@@ -31,7 +31,7 @@ void main() async {
   final actorSystem = ActorSystem();
 
   // create 2 actors
-  final actorRef1 = await actorSystem.createActor(actorPath('/test/1'), factory: actorFactory);
+  final actorRef1 = await actorSystem.createActor(actorPath('/test/1'), factory: actorFactory, sendInit: true);
   await actorSystem.createActor(actorPath('/test/2'), factory: actorFactory);
 
   final actorRef2 = await actorSystem.lookupActor(actorPath('/test/2'));

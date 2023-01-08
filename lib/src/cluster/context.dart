@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:actor_system/actor_system.dart';
 import 'package:actor_system/src/cluster/node.dart';
+import 'package:actor_system/src/system/actor.dart';
 
 ClusterContext createClusterContext(LocalNode localNode) {
   return ClusterContext._(localNode);
@@ -18,10 +19,15 @@ class ClusterContext implements BaseContext {
     ActorFactory? factory,
     int? mailboxSize,
     bool? useExistingActor,
-  }) {
+    bool sendInit = false,
+  }) async {
     assert(factory == null, 'factory is always ignored in cluster mode');
 
-    return _localNode.createActor(path, mailboxSize, useExistingActor);
+    final result = await _localNode.createActor(path, mailboxSize, useExistingActor);
+    if (sendInit) {
+      await result.send(initMsg);
+    }
+    return result;
   }
 
   @override
