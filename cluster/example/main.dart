@@ -1,0 +1,71 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:actor_cluster/actor_cluster.dart';
+import 'package:actor_system/actor_system.dart';
+import 'package:logging/logging.dart';
+
+class StringDerDes implements SerDes {
+  @override
+  Object? deserialize(Uint8List data) {
+    return utf8.decode(data);
+  }
+
+  @override
+  Uint8List serialize(Object? message) {
+    if (message is String) {
+      return Uint8List.fromList(utf8.encode(message));
+    }
+    throw ArgumentError.value(message, 'message', 'not of type String');
+  }
+}
+
+void log(LogRecord record) {
+  print('${record.loggerName} ${record.level} ${record.message}');
+}
+
+void main(List<String> args) async {
+  Logger.root.onRecord.listen(log);
+
+  final clusterNode = ActorCluster(await readConfigFromYaml('${args[0]}.yaml'), StringDerDes(), onLogRecord: log);
+  await clusterNode.init(
+    prepareNodeSystem: (registerFactory) {
+      registerFactory('/actor/1', (path) {
+        return (ActorContext context, Object? msg) async {
+          final log = Logger(context.current.path.toString());
+          final replyTo = context.replyTo;
+          log.info('message: $msg');
+          log.info('correlationId: ${context.correlationId}');
+          log.info('replyTo: ${replyTo?.path}');
+          replyTo?.send(msg, correlationId: context.correlationId, sender: context.current);
+        };
+      });
+      registerFactory('/actor/2', (path) {
+        return (ActorContext context, Object? msg) async {
+          final log = Logger(context.current.path.toString());
+          log.info('message: $msg');
+          log.info('correlationId: ${context.correlationId}');
+          log.info('sender: ${context.sender?.path}');
+          final actorRef = await context.lookupActor(actorPath('/actor/3'));
+          actorRef?.send(msg, correlationId: context.correlationId, sender: context.current);
+        };
+      });
+      registerFactory('/actor/3', (path) {
+        return (ActorContext context, Object? msg) {
+          final log = Logger(context.current.path.toString());
+          log.info('message: $msg');
+          log.info('correlationId: ${context.correlationId}');
+          log.info('sender: ${context.sender?.path}');
+        };
+      });
+    },
+    afterClusterInit: (context, isLeader) async {
+      if (isLeader) {
+        final actorRef1 = await context.createActor(Uri.parse('//node1/actor/1'));
+        final actorRef2 = await context.createActor(Uri.parse('//node2/actor/2'));
+        await context.createActor(Uri.parse('//node1/actor/3'));
+        await actorRef1.send('hello cluster actor!', correlationId: '101', replyTo: actorRef2);
+      }
+    },
+  );
+}

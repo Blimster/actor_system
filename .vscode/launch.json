@@ -8,20 +8,14 @@
             "name": "node 1",
             "request": "launch",
             "type": "dart",
-            "program": "example/cluster_example.dart",
-            "args": ["config1"]
+            "program": "cluster/example/main.dart",
+            "args": ["config1"],
         }, {
             "name": "node 2",
             "request": "launch",
             "type": "dart",
-            "program": "example/cluster_example.dart",
+            "program": "cluster/example/main.dart",
             "args": ["config2"]
-        }, {
-            "name": "node 3",
-            "request": "launch",
-            "type": "dart",
-            "program": "example/cluster_example.dart",
-            "args": ["config3"]
         }
     ]
 }
