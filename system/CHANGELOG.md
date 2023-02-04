@@ -6,6 +6,7 @@
 - BREAKING CHANGE: renamed library `actor_builder` to `actor_system_helper`.
 - BREAKING CHANGE: reaname class `WhenLikeActorBuilder` to `ActorBuilder`.
 - BREAKING CHANGE: class `ActorBuilder` no longer has a method `actor()`. Use `orActor()`, `orSkip()` or `orThrow()` instead.
+- BREAKING CHANGE: replaced `ActorSystem.registerFactory(Pattern, ActorFactory)` by `ActorSystem.addActorFactory(PathMatcher, ActoryFactory)`.
 - It is now possible to stop an actor. This can be done by calling `ActorRef.shutdown()` or sending the constant `shutdownMsg` to the actor.
 - An actor can now throw a `SkipMessage` while executing a message. In contrast to all other exceptions thrown by an actor, the actor is not restarted.
 - Added `ActorContextExtension` on `ActorContext` with getters `senderOrSkip`, `replyToOrSkip` and `correlationIdOrSkip`. Use these methods to get null safe versions of `sender`,  `replyTo` and `correlationId`. If a value is `null`, a `SkipMessage` is thrown.

@@ -30,7 +30,7 @@ void main(List<String> args) async {
   final clusterNode = ActorCluster(await readConfigFromYaml('${args[0]}.yaml'), StringDerDes(), onLogRecord: log);
   await clusterNode.init(
     prepareNodeSystem: (registerFactory) {
-      registerFactory('/actor/1', (path) {
+      registerFactory(patternMatcher('/actor/1'), (path) {
         return (ActorContext context, Object? msg) async {
           final log = Logger(context.current.path.toString());
           final replyTo = context.replyTo;
@@ -40,7 +40,7 @@ void main(List<String> args) async {
           replyTo?.send(msg, correlationId: context.correlationId, sender: context.current);
         };
       });
-      registerFactory('/actor/2', (path) {
+      registerFactory(patternMatcher('/actor/2'), (path) {
         return (ActorContext context, Object? msg) async {
           final log = Logger(context.current.path.toString());
           log.info('message: $msg');
@@ -50,7 +50,7 @@ void main(List<String> args) async {
           actorRef?.send(msg, correlationId: context.correlationId, sender: context.current);
         };
       });
-      registerFactory('/actor/3', (path) {
+      registerFactory(patternMatcher('/actor/3'), (path) {
         return (ActorContext context, Object? msg) {
           final log = Logger(context.current.path.toString());
           log.info('message: $msg');

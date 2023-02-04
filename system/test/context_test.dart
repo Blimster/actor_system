@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:actor_system/actor_system.dart';
-import 'package:actor_system/src/system/exceptions.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -46,7 +45,7 @@ void main() {
 
   group('system context', () {
     test('a registered factory creates actor for a matching path', () async {
-      system.registerFactory('/actor', (path) => (ctx, msg) => null);
+      system.addActorFactory(patternMatcher('/actor'), (path) => (ctx, msg) => null);
       final actor = await system.createActor(Uri.parse('/actor/foo'));
       expect(actor, isNotNull);
     });

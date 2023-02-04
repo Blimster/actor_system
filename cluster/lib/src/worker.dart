@@ -125,7 +125,7 @@ class Worker {
   Future<void> start() async {
     actorSystem.externalCreate = _externalCreate;
     actorSystem.externalLookup = _externalLookup;
-    await prepareNodeSystem?.call(actorSystem.registerFactory);
+    await prepareNodeSystem?.call(actorSystem.addActorFactory);
   }
 }
 

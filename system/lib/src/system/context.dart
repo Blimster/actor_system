@@ -34,7 +34,7 @@ abstract class BaseContext {
   final String _name;
   final MissingHostHandling _missingHostHandling;
   final Map<String, ActorRef> _actorRefs;
-  final Map<Pattern, ActorFactory> _factories;
+  final List<MatcherAndFactory> _factories;
   final NullableRef<ExternalActorCreate> _externalCreate;
   final NullableRef<ExternalActorLookup> _externalLookup;
   ActorRef? _current;
@@ -58,7 +58,7 @@ abstract class BaseContext {
   /// ends with a slash (/), the path is extended by an UUID.
   ///
   /// The given [ActorFactory] is called to create the actor for the given path.
-  /// If no factory is provided, a registered factory for the given path is
+  /// If no factory is provided, a global factory for the given path is
   /// used. If such factory does not exists, an error is thrown. This factory
   /// will also be used to recreate the actor in case of an error.
   ///
@@ -111,7 +111,7 @@ abstract class BaseContext {
     }
 
     // search for registered factory if no factory is provided
-    final actorFactory = factory ?? _findFactory(path.path);
+    final actorFactory = factory ?? _findFactory(path);
     if (actorFactory == null) {
       throw NoFactoryFound(path);
     }
@@ -160,14 +160,13 @@ abstract class BaseContext {
     return result;
   }
 
-  ActorFactory? _findFactory(String path) {
+  ActorFactory? _findFactory(Uri path) {
     _log.fine('_findFactory < path=$path');
-    for (final entry in _factories.entries) {
-      final matches = entry.key.allMatches(path);
-      if (matches.isNotEmpty) {
-        _log.fine('_findFactory | factory found with pattern ${entry.key}');
+    for (final factory in _factories) {
+      if (factory.matcher(path)) {
+        _log.fine('_findFactory | factory found');
         _log.fine('_findFactory > ActorFactory');
-        return entry.value;
+        return factory.factory;
       }
     }
     _log.fine('_findFactory > null');
@@ -200,7 +199,7 @@ class ActorContext extends BaseContext {
     String name,
     MissingHostHandling missingHostHandling,
     Map<String, ActorRef> actorRefs,
-    Map<Pattern, ActorFactory> factories,
+    List<MatcherAndFactory> factories,
     NullableRef<ExternalActorCreate> externalCreate,
     NullableRef<ExternalActorLookup> externalLookup,
   ) : super._(
@@ -231,6 +230,18 @@ class ActorContext extends BaseContext {
   String? get correlationId => _correlationId;
 }
 
+/// Return a [PathMatcher] that uses the given [pattern] on the path
+/// of the actor.
+PathMatcher patternMatcher(Pattern pattern) {
+  return (Uri path) {
+    final matches = pattern.allMatches(path.path);
+    return matches.isNotEmpty;
+  };
+}
+
+/// Returns true, if the given path matches.
+typedef PathMatcher = bool Function(Uri path);
+
 /// An [ActorSystem] is a collection of actors, the can communicate with each
 /// other. An actor can only create or lookup actors in the same [ActorSystem].
 class ActorSystem extends BaseContext {
@@ -240,16 +251,18 @@ class ActorSystem extends BaseContext {
           name.toLowerCase(),
           missingHostHandling,
           {},
-          {},
+          [],
           NullableRef(),
           NullableRef(),
         );
 
-  /// Registers an [ActorFactory] for the given [path]. The factory is used to
-  /// create a new actor if a call to [ActorContext.createActor] has no factory
-  /// and the path matches.
-  void registerFactory(Pattern pattern, ActorFactory factory) {
-    _factories[pattern] = factory;
+  /// Adds a global actor factory for the actor system. A global factory is used
+  /// to create a new actor if the caller of [BaseContext.createActor] provides no
+  /// factory. The first factory (in order they were added) where the matcher
+  /// returns true is called to create the actor. If no matcher matches, an
+  /// exception is thrown.
+  void addActorFactory(PathMatcher pathMatcher, ActorFactory factory) {
+    _factories.add(MatcherAndFactory(pathMatcher, factory));
   }
 
   /// Sets the external create function. This function is used to create actors
@@ -259,4 +272,10 @@ class ActorSystem extends BaseContext {
   /// Sets the external lookup function. This function is used to lookup actors
   /// outside of the current [ActorSystem].
   set externalLookup(ExternalActorLookup? lookup) => _externalLookup.value = lookup;
+}
+
+class MatcherAndFactory {
+  final PathMatcher matcher;
+  final ActorFactory factory;
+  MatcherAndFactory(this.matcher, this.factory);
 }
