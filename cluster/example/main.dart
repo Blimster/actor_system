@@ -22,12 +22,18 @@ class StringDerDes implements SerDes {
 
 void log(LogRecord record) {
   print('${record.loggerName} ${record.level} ${record.message}');
+  // if (record.loggerName.startsWith('actor://')) {}
 }
 
 void main(List<String> args) async {
   Logger.root.onRecord.listen(log);
 
-  final clusterNode = ActorCluster(await readConfigFromYaml('${args[0]}.yaml'), StringDerDes(), onLogRecord: log);
+  final clusterNode = ActorCluster(
+    await readConfigFromYaml('example/${args[0]}.yaml'),
+    StringDerDes(),
+    onLogRecord: log,
+  );
+
   await clusterNode.init(
     prepareNodeSystem: (registerFactory) {
       registerFactory(patternMatcher('/actor/1'), (path) {
