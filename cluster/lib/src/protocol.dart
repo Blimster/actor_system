@@ -65,8 +65,10 @@ class Protocol {
     this._handleLookupActor,
     this._handleSendMessage,
   ) : _log = Logger('actor_system.cluster.Protocol:$id') {
-    // TODO handle errors
-    _channel.stream.listen(_onMessage);
+    final sub = _channel.stream.listen(_onMessage);
+    sub.onError((err) {
+      sub.cancel();
+    });
   }
 
   Future<ActorRef> createActor(Uri path, int? mailboxSize) {

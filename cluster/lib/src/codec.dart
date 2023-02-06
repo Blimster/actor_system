@@ -110,6 +110,7 @@ class MessageChannel extends StreamChannelMixin<ProtocolMessage> {
               )));
         } catch (err) {
           _inController.addError(err);
+          return;
         }
       }
     });

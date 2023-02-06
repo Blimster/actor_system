@@ -338,7 +338,6 @@ class ActorCluster {
         _log.info('connectToSeedNodes | socket closed');
       }
     }
-
     // start node
     if (!_hasMissingSeedNodes()) {
       await _startNode();
@@ -368,17 +367,23 @@ class ActorCluster {
   }
 
   void _startConnectingToMissingNodes() {
+    _log.info('startConnectingToMissingNodes <');
     if (_connectTimer == null && _hasMissingSeedNodes()) {
+      _log.info('startConnectingToMissingNodes | starting periodic timer');
       _connectTimer = Timer.periodic(
         Duration(seconds: 5),
         (_) => _connectToSeedNodes(),
       );
+      _log.info('startConnectingToMissingNodes | timer started');
     }
+    _log.info('startConnectingToMissingNodes >');
   }
 
   void _stopConnectingToMissingNodes() {
+    _log.info('stopConnectingToMissingNodes <');
     _connectTimer?.cancel();
     _connectTimer = null;
+    _log.info('stopConnectingToMissingNodes >');
   }
 
   Future<void> _stopWorkers() async {
