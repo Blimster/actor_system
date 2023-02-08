@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:actor_cluster/src/messages/cluster_initialized.dart';
 import 'package:actor_cluster/src/messages/create_actor.dart';
 import 'package:actor_cluster/src/messages/lookup_actor.dart';
 import 'package:actor_cluster/src/messages/send_message.dart';
@@ -11,6 +12,7 @@ import 'package:logging/logging.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:uuid/uuid.dart';
 
+const clusterInitializedMessageName = 'ci';
 const createActorMessageName = 'ca';
 const lookupActorMessageName = 'la';
 const sendMessageMessageName = 'sm';
@@ -18,6 +20,7 @@ const sendMessageMessageName = 'sm';
 enum ProtocolMessageType {
   request,
   response,
+  oneWay,
 }
 
 abstract class PackableData {
@@ -51,6 +54,7 @@ class Protocol {
   final StreamChannel<ProtocolMessage> _channel;
   final SerDes _serDes;
   final Duration _timeout;
+  final void Function(String nodeId) _handleClusterInitialized;
   final Future<CreateActorResponse> Function(Uri path, int? mailboxSize) _handleCreateActor;
   final Future<LookupActorResponse> Function(Uri path) _handleLookupActor;
   final Future<SendMessageResponse> Function(
@@ -61,6 +65,7 @@ class Protocol {
     this._channel,
     this._serDes,
     this._timeout,
+    this._handleClusterInitialized,
     this._handleCreateActor,
     this._handleLookupActor,
     this._handleSendMessage,
@@ -69,6 +74,15 @@ class Protocol {
     sub.onError((err) {
       sub.cancel();
     });
+  }
+
+  void publishClusterInitialized(String nodeId) async {
+    _channel.sink.add(ProtocolMessage(
+      ProtocolMessageType.oneWay,
+      clusterInitializedMessageName,
+      '',
+      ClusterInitialized(nodeId),
+    ));
   }
 
   Future<ActorRef> createActor(Uri path, int? mailboxSize) {
@@ -234,6 +248,16 @@ class Protocol {
             default:
               throw StateError('message name ${message.name} is not supported');
           }
+        }
+        break;
+      case ProtocolMessageType.oneWay:
+        switch (message.name) {
+          case clusterInitializedMessageName:
+            final oneWay = message.data as ClusterInitialized;
+            _handleClusterInitialized(oneWay.nodeId);
+            break;
+          default:
+            throw StateError('message name ${message.name} is not supported');
         }
         break;
       default:

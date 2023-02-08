@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:actor_cluster/src/messages/cluster_initialized.dart';
 import 'package:actor_cluster/src/messages/create_actor.dart';
 import 'package:actor_cluster/src/messages/lookup_actor.dart';
 import 'package:actor_cluster/src/messages/send_message.dart';
@@ -12,6 +13,8 @@ import 'package:stream_channel/stream_channel.dart';
 
 PackableData _createMessage(ProtocolMessageType messageType, String messageName, Uint8List messageData, SerDes serDes) {
   switch (messageName) {
+    case clusterInitializedMessageName:
+      return ClusterInitialized.unpack(messageData);
     case createActorMessageName:
       switch (messageType) {
         case ProtocolMessageType.request:

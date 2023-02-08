@@ -35,8 +35,8 @@ void main(List<String> args) async {
   );
 
   await clusterNode.init(
-    prepareNodeSystem: (registerFactory) {
-      registerFactory(patternMatcher('/actor/1'), (path) {
+    addActorFactories: (addActorFactory) {
+      addActorFactory(patternMatcher('/actor/1'), (path) {
         return (ActorContext context, Object? msg) async {
           final log = Logger(context.current.path.toString());
           final replyTo = context.replyTo;
@@ -46,7 +46,7 @@ void main(List<String> args) async {
           replyTo?.send(msg, correlationId: context.correlationId, sender: context.current);
         };
       });
-      registerFactory(patternMatcher('/actor/2'), (path) {
+      addActorFactory(patternMatcher('/actor/2'), (path) {
         return (ActorContext context, Object? msg) async {
           final log = Logger(context.current.path.toString());
           log.info('message: $msg');
@@ -56,7 +56,7 @@ void main(List<String> args) async {
           actorRef?.send(msg, correlationId: context.correlationId, sender: context.current);
         };
       });
-      registerFactory(patternMatcher('/actor/3'), (path) {
+      addActorFactory(patternMatcher('/actor/3'), (path) {
         return (ActorContext context, Object? msg) {
           final log = Logger(context.current.path.toString());
           log.info('message: $msg');
@@ -65,13 +65,11 @@ void main(List<String> args) async {
         };
       });
     },
-    afterClusterInit: (context, isLeader) async {
-      if (isLeader) {
-        final actorRef1 = await context.createActor(Uri.parse('//node1/actor/1'));
-        final actorRef2 = await context.createActor(Uri.parse('//node2/actor/2'));
-        await context.createActor(Uri.parse('//node1/actor/3'));
-        await actorRef1.send('hello cluster actor!', correlationId: '101', replyTo: actorRef2);
-      }
+    initCluster: (context) async {
+      final actorRef1 = await context.createActor(Uri.parse('//node1/actor/1'));
+      final actorRef2 = await context.createActor(Uri.parse('//node2/actor/2'));
+      await context.createActor(Uri.parse('//node1/actor/3'));
+      await actorRef1.send('hello cluster actor!', correlationId: '101', replyTo: actorRef2);
     },
   );
 }

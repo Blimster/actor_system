@@ -15,19 +15,17 @@ import 'package:logging/logging.dart';
 import 'package:stream_channel/isolate_channel.dart';
 import 'package:uuid/uuid.dart';
 
-/// Called after the cluster is initialized. This callback is called on every
-/// node as the very last action in [ActorCluster.init]. Use the parameter
-/// [isLeader] to execution init actions on only a single node (the leader
-/// node).
-typedef AfterClusterInit = FutureOr<void> Function(
-  ClusterContext context,
-  bool isLeader,
-);
+/// Called after all seed nodes are up and connected. This
+/// callback is only called on the node elected as leader.
+typedef InitCluster = FutureOr<void> Function(ClusterContext context);
 
-/// Called to preprare the actor system on every worker of a node. Use this
-/// callback to register actor factories.
-typedef PrepareNodeSystem = FutureOr<void> Function(
-    void Function(PathMatcher pathMatcher, ActorFactory factory) addActorFactory);
+/// To be called by the implementor of [AddActorFactories]
+/// to add factories.
+typedef AddActorFactory = void Function(PathMatcher pathMatcher, ActorFactory factory);
+
+/// Called to preprare the actor system of every worker of
+///  a node. Use this callback to add actor factories.
+typedef AddActorFactories = FutureOr<void> Function(AddActorFactory addActorFactory);
 
 enum NodeState {
   created,
@@ -55,8 +53,9 @@ class ActorCluster {
   final Level? _logLevel;
   final void Function(LogRecord)? _onLogRecord;
   late final LocalNode _localNode;
-  AfterClusterInit? _afterClusterInit;
-  PrepareNodeSystem? _prepareNodeSystem;
+  bool _clusterInitialized = false;
+  InitCluster? _initCluster;
+  AddActorFactories? _addActorFactories;
   NodeState _state = NodeState.created;
   ServerSocket? _serverSocket;
   Timer? _connectTimer;
@@ -70,18 +69,18 @@ class ActorCluster {
   NodeState get state => _state;
 
   Future<void> init({
-    AfterClusterInit? afterClusterInit,
-    PrepareNodeSystem? prepareNodeSystem,
+    InitCluster? initCluster,
+    AddActorFactories? addActorFactories,
   }) async {
-    _log.info('init < afterInit=$afterClusterInit');
+    _log.info('init < initCluster=$initCluster, addActorFactories=$addActorFactories');
 
     _log.info('init | state is ${_state.name}');
     if (_state != NodeState.created) {
       throw StateError('node is not in state ${NodeState.created.name}');
     }
 
-    _afterClusterInit = afterClusterInit;
-    _prepareNodeSystem = prepareNodeSystem;
+    _initCluster = initCluster;
+    _addActorFactories = addActorFactories;
 
     _state = NodeState.starting;
     _log.info('init | set state to ${_state.name}');
@@ -130,7 +129,9 @@ class ActorCluster {
     if (_hasMissingSeedNodes()) {
       _startConnectingToMissingNodes();
     } else {
+      _stopConnectingToMissingNodes();
       await _startNode();
+      await _initializeCluster();
     }
 
     _log.info('init >');
@@ -202,6 +203,7 @@ class ActorCluster {
           _config.localNode.id,
           _uuid,
           _config.workers,
+          _clusterInitialized,
         ).toJson(),
       ));
 
@@ -214,6 +216,8 @@ class ActorCluster {
           socketAdapter.streamReader,
           socketAdapter.socket,
           Duration(seconds: _config.timeout),
+          handshakeRequest.clusterInitialized,
+          _handleClusterInitialized,
         );
 
         // handle closed connection
@@ -225,7 +229,9 @@ class ActorCluster {
       }
 
       if (!_hasMissingSeedNodes()) {
+        _stopConnectingToMissingNodes();
         await _startNode();
+        await _initializeCluster();
       }
     } catch (e, s) {
       timer.cancel();
@@ -286,6 +292,7 @@ class ActorCluster {
             _config.localNode.id,
             _uuid,
             _config.workers,
+            _clusterInitialized,
           ).toJson(),
         ));
 
@@ -324,6 +331,8 @@ class ActorCluster {
             socketAdapter.streamReader,
             socketAdapter.socket,
             Duration(seconds: _config.timeout),
+            handshakeResponse.clusterInitialized,
+            _handleClusterInitialized,
           );
           closedConnectionHandler.nodeId = handshakeResponse.nodeId;
         } else {
@@ -340,7 +349,9 @@ class ActorCluster {
     }
     // start node
     if (!_hasMissingSeedNodes()) {
+      _stopConnectingToMissingNodes();
       await _startNode();
+      await _initializeCluster();
     }
 
     _log.info('connectToSeedNodes >');
@@ -364,6 +375,23 @@ class ActorCluster {
     }
     final smallestRemoteUuid = remoteUuids.first;
     return _uuid.compareTo(smallestRemoteUuid) < 0;
+  }
+
+  bool _isClusterInitialized() {
+    for (final isInitialized in _localNode.clusterInitializationState().values) {
+      if (isInitialized == true) {
+        return true;
+      }
+    }
+    return _clusterInitialized;
+  }
+
+  void _handleClusterInitialized(String nodeId) {
+    _log.info('handleClusterInitialized <');
+    _log.info('handleClusterInitialized | cluster initialized by node $nodeId');
+    _clusterInitialized = true;
+    _log.info('handleClusterInitialized | set cluster to initialized');
+    _log.info('handleClusterInitialized >');
   }
 
   void _startConnectingToMissingNodes() {
@@ -394,9 +422,8 @@ class ActorCluster {
 
   Future<void> _startNode() async {
     _log.info('startNode <');
-    _stopConnectingToMissingNodes();
     _log.info('startNode | state is ${_state.name}');
-    if (_state != NodeState.started) {
+    if (_state == NodeState.starting) {
       for (var workerId = 1; workerId <= _config.workers; workerId++) {
         final receivePort = ReceivePort();
         final isolate = await Isolate.spawn<WorkerBootstrapMsg>(
@@ -405,7 +432,7 @@ class ActorCluster {
             _config.localNode.id,
             workerId,
             _config.timeout,
-            _prepareNodeSystem,
+            _addActorFactories,
             _serDes,
             receivePort.sendPort,
             _logLevel,
@@ -417,22 +444,43 @@ class ActorCluster {
             workerId, isolate, IsolateChannel.connectReceive(receivePort), Duration(seconds: _config.timeout));
       }
       _log.info('startNode | ${_config.workers} worker(s) started');
+      _state = NodeState.started;
+      _log.info('startNode | set state to ${_state.name}');
+    } else if (_state == NodeState.started) {
+      _log.info('startNode | skipped starting workers');
+    } else {
+      throw StateError('startNode() was called in state $_state, which is an error!');
+    }
+    _log.info('startNode >');
+  }
 
+  Future<void> _initializeCluster() async {
+    _log.info('initCluster <');
+    final isClusterInitialized = _isClusterInitialized();
+    _log.info('initCluster | cluster is ${isClusterInitialized ? 'already' : 'not'} initialized');
+    if (!isClusterInitialized) {
       final isLeader = _isLeader();
-      _log.info('startNode | node is ${isLeader ? '' : 'not '}leader');
-      if (_afterClusterInit != null) {
-        _log.info('startNode | calling afterInit callback...');
-        try {
-          await _afterClusterInit?.call(createClusterContext(_localNode), isLeader);
-          _log.info('startNode | returned from afterInit callback');
-          _state = NodeState.started;
-          _log.info('startNode | set state to ${_state.name}');
-        } catch (e) {
-          _log.info('startNode | returned from afterInit callback with error: $e');
-          shutdown();
+      _log.info('initCluster | node is ${isLeader ? '' : 'not '}leader');
+      if (isLeader) {
+        if (_initCluster != null) {
+          _log.info('initCluster | calling init cluster callback...');
+          try {
+            await _initCluster?.call(createClusterContext(_localNode));
+            _log.info('initCluster | returned from init cluster callback');
+            _clusterInitialized = true;
+            _localNode.publishClusterInitialized(_localNode.nodeId);
+            _log.info('initCluster | set cluster to initialized');
+          } catch (e) {
+            _log.info('initCluster | returned from init cluster callback with error: $e');
+            shutdown();
+          }
+        } else {
+          _log.info('initCluster | init cluster callback not provided');
+          _clusterInitialized = true;
+          _log.info('initCluster | set cluster to initialized');
         }
       }
     }
-    _log.info('startNode >');
+    _log.info('initCluster >');
   }
 }

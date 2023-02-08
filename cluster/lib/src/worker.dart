@@ -15,7 +15,7 @@ class WorkerBootstrapMsg {
   final String nodeId;
   final int workerId;
   final int timeout;
-  final PrepareNodeSystem? prepareNodeSystem;
+  final AddActorFactories? addActorFactories;
   final SerDes serDes;
   final SendPort sendPort;
   final Level? logLevel;
@@ -25,7 +25,7 @@ class WorkerBootstrapMsg {
     this.nodeId,
     this.workerId,
     this.timeout,
-    this.prepareNodeSystem,
+    this.addActorFactories,
     this.serDes,
     this.sendPort,
     this.logLevel,
@@ -39,7 +39,7 @@ class Worker {
   final ActorSystem actorSystem;
   final IsolateChannel<ProtocolMessage> channel;
   final SerDes serDes;
-  final PrepareNodeSystem? prepareNodeSystem;
+  final AddActorFactories? addActorFactories;
   late final Protocol protocol;
 
   Worker(
@@ -48,7 +48,7 @@ class Worker {
     this.actorSystem,
     this.channel,
     this.serDes,
-    this.prepareNodeSystem,
+    this.addActorFactories,
     Duration timeout,
   ) {
     protocol = Protocol(
@@ -56,10 +56,15 @@ class Worker {
       channel,
       serDes,
       timeout,
+      _handleClusterInitialized,
       _handleCreateActor,
       _handleLookupActor,
       _handleSendMessage,
     );
+  }
+
+  void _handleClusterInitialized(String nodeId) {
+    throw StateError('init cluster message must not be sent to a worker');
   }
 
   Future<CreateActorResponse> _handleCreateActor(Uri path, int? mailboxSize) async {
@@ -125,7 +130,7 @@ class Worker {
   Future<void> start() async {
     actorSystem.externalCreate = _externalCreate;
     actorSystem.externalLookup = _externalLookup;
-    await prepareNodeSystem?.call(actorSystem.addActorFactory);
+    await addActorFactories?.call(actorSystem.addActorFactory);
   }
 }
 
@@ -155,7 +160,7 @@ Future<void> bootstrapWorker(WorkerBootstrapMsg message) async {
     actorSystem,
     isolateChannel,
     message.serDes,
-    message.prepareNodeSystem,
+    message.addActorFactories,
     Duration(seconds: message.timeout),
   );
   await worker.start();

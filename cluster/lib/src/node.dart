@@ -28,6 +28,8 @@ abstract class Node {
 
   int get workers;
 
+  void publishClusterInitialized(String nodeId);
+
   Future<ActorRef> createActor(
     Uri path,
     int? mailboxSize,
@@ -52,7 +54,15 @@ class LocalNode extends Node {
   int get workers => _workerAdapters.length;
 
   void addRemoteNode(
-      String nodeId, String uuid, int workers, StreamReader reader, Sink<List<int>> writer, Duration timeout) {
+    String nodeId,
+    String uuid,
+    int workers,
+    StreamReader reader,
+    Sink<List<int>> writer,
+    Duration timeout,
+    bool clusterInitialized,
+    void Function(String nodeId) handleClusterInitialized,
+  ) {
     _log.info('addRemoteNode < nodeId=$nodeId, uuid=$uuid, workers=$workers, timeout=$timeout');
     _remoteNodes[nodeId] = RemoteNode(
       nodeId,
@@ -63,10 +73,12 @@ class LocalNode extends Node {
         MessageChannel(reader, writer, _serDes),
         _serDes,
         timeout,
+        handleClusterInitialized,
         _handleCreateActor,
         _handleLookupActor,
         _handleSendMessage,
       ),
+      clusterInitialized,
     );
     _log.info('addRemoteNode >');
   }
@@ -91,6 +103,10 @@ class LocalNode extends Node {
     return result;
   }
 
+  Map<String, bool> clusterInitializationState() {
+    return _remoteNodes.map((k, v) => MapEntry(k, v.clusterInitialized));
+  }
+
   void addWorker(int workerId, Isolate isolate, StreamChannel<ProtocolMessage> channel, Duration timeout) {
     _log.info('addWorker < workderId=$workerId, timeout=$timeout');
     assert(!_workerAdapters.containsKey(workerId), 'worker with id $workerId is already added');
@@ -104,12 +120,20 @@ class LocalNode extends Node {
         channel,
         _serDes,
         timeout,
+        _handleClusterInitialized,
         _handleCreateActor,
         _handleLookupActor,
         _handleSendMessage,
       ),
     );
     _log.info('addWorker >');
+  }
+
+  @override
+  void publishClusterInitialized(String nodeId) {
+    for (var remoteNode in _remoteNodes.values) {
+      remoteNode.publishClusterInitialized(nodeId);
+    }
   }
 
   @override
@@ -220,6 +244,10 @@ class LocalNode extends Node {
       await workerAdapter.stop();
     }
     _workerAdapters.clear();
+  }
+
+  void _handleClusterInitialized(String nodeId) {
+    throw StateError('init cluster message must not be sent to a local node');
   }
 
   Future<CreateActorResponse> _handleCreateActor(Uri path, int? mailboxSize) async {
@@ -416,11 +444,17 @@ class RemoteNode extends Node {
   @override
   final int workers;
   final Protocol protocol;
+  final bool clusterInitialized;
 
-  RemoteNode(super.nodeId, super.uuid, this.workers, this.protocol);
+  RemoteNode(super.nodeId, super.uuid, this.workers, this.protocol, this.clusterInitialized);
 
   @override
   bool get isLocal => false;
+
+  @override
+  void publishClusterInitialized(String nodeId) {
+    protocol.publishClusterInitialized(nodeId);
+  }
 
   @override
   Future<ActorRef> createActor(Uri path, int? mailboxSize, bool? useExistingActor) {

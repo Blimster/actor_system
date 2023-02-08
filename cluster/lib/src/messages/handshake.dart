@@ -9,6 +9,7 @@ class HandshakeRequest {
   final String nodeId;
   final String uuid;
   final int workers;
+  final bool clusterInitialized;
 
   HandshakeRequest(
     this.correlationId,
@@ -16,6 +17,7 @@ class HandshakeRequest {
     this.nodeId,
     this.uuid,
     this.workers,
+    this.clusterInitialized,
   );
 
   factory HandshakeRequest.fromJson(String jsonString) {
@@ -26,6 +28,7 @@ class HandshakeRequest {
       jsonMap['nodeId'],
       jsonMap['uuid'],
       jsonMap['workers'],
+      jsonMap['clusterInitialized'],
     );
   }
 
@@ -35,6 +38,7 @@ class HandshakeRequest {
         'nodeId': nodeId,
         'uuid': uuid,
         'workers': workers,
+        'clusterInitialized': clusterInitialized,
       });
 }
 
@@ -43,14 +47,22 @@ class HandshakeResponse {
   final String nodeId;
   final String uuid;
   final int workers;
+  final bool clusterInitialized;
 
-  HandshakeResponse(this.correlationId, this.nodeId, this.uuid, this.workers);
+  HandshakeResponse(
+    this.correlationId,
+    this.nodeId,
+    this.uuid,
+    this.workers,
+    this.clusterInitialized,
+  );
 
   factory HandshakeResponse.fromJson(String jsonString) => HandshakeResponse(
         json.decode(jsonString)['correlationId'],
         json.decode(jsonString)['nodeId'],
         json.decode(jsonString)['uuid'],
         json.decode(jsonString)['workers'],
+        json.decode(jsonString)['clusterInitialized'],
       );
 
   String toJson() => json.encode({
@@ -58,5 +70,6 @@ class HandshakeResponse {
         'nodeId': nodeId,
         'uuid': uuid,
         'workers': workers,
+        'clusterInitialized': clusterInitialized,
       });
 }
