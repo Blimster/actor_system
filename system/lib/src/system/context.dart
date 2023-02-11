@@ -11,8 +11,8 @@ enum MissingHostHandling {
   /// The path is considered to be a path in the local system.
   asLocal,
 
-  /// The path is considered to be an external path. [ExternalActorCreate] and
-  /// [ExternalActorLookup] are used to create and lookup the actor.
+  /// The path is considered to be an external path. [CreateActor] and
+  /// [LookupActor] are used to create and lookup the actor.
   asExternal,
 }
 
@@ -35,8 +35,9 @@ abstract class BaseContext {
   final MissingHostHandling _missingHostHandling;
   final Map<String, ActorRef> _actorRefs;
   final List<MatcherAndFactory> _factories;
-  final NullableRef<ExternalActorCreate> _externalCreate;
-  final NullableRef<ExternalActorLookup> _externalLookup;
+  final NullableRef<CreateActor> _externalCreateActor;
+  final NullableRef<LookupActor> _externalLookupActor;
+  final NullableRef<LookupActors> _externalLookupActors;
   ActorRef? _current;
   ActorRef? _sender;
   ActorRef? _replyTo;
@@ -47,8 +48,9 @@ abstract class BaseContext {
     this._missingHostHandling,
     this._actorRefs,
     this._factories,
-    this._externalCreate,
-    this._externalLookup,
+    this._externalCreateActor,
+    this._externalLookupActor,
+    this._externalLookupActors,
   ) : _log = Logger('actor_system.system.BaseContext:$_name');
 
   /// Creates an actor at the given path.
@@ -85,7 +87,7 @@ abstract class BaseContext {
     /// check if the actor must be created externally
     if (!_isLocalPath(path)) {
       _log.fine('createActor | path is an external path');
-      final externalCreate = _externalCreate.value;
+      final externalCreate = _externalCreateActor.value;
       if (externalCreate != null) {
         final result = await externalCreate(
           path,
@@ -129,8 +131,9 @@ abstract class BaseContext {
           _missingHostHandling,
           _actorRefs,
           _factories,
-          _externalCreate,
-          _externalLookup,
+          _externalCreateActor,
+          _externalLookupActor,
+          _externalLookupActors,
         ));
     if (_isLocalPath(path)) {
       _actorRefs[actorPath.path] = actorRef;
@@ -155,8 +158,31 @@ abstract class BaseContext {
       _log.info('lookupActor > $result');
       return result;
     }
-    final result = await _externalLookup.value?.call(path);
+    final result = await _externalLookupActor.value?.call(path);
     _log.info('lookupActor > $result');
+    return result;
+  }
+
+  Future<List<ActorRef>> lookupActors(Uri path) async {
+    path = path.validActorPath();
+    _log.info('lookupActors < path=$path');
+    final result = <ActorRef>[];
+    if (_isLocalPath(path)) {
+      _log.info('lookupActors | path is a local path');
+      final p = path.path.endsWith('/') ? path.path : '${path.path}/';
+      for (final actorRef in _actorRefs.entries) {
+        if (actorRef.key.startsWith(p)) {
+          result.add(actorRef.value);
+        }
+      }
+    } else {
+      _log.info('lookupActors | path is an external path');
+      final externalActors = await _externalLookupActors.value?.call(path);
+      if (externalActors != null) {
+        result.addAll(externalActors);
+      }
+    }
+    _log.info('lookupActors > $result');
     return result;
   }
 
@@ -200,8 +226,9 @@ class ActorContext extends BaseContext {
     MissingHostHandling missingHostHandling,
     Map<String, ActorRef> actorRefs,
     List<MatcherAndFactory> factories,
-    NullableRef<ExternalActorCreate> externalCreate,
-    NullableRef<ExternalActorLookup> externalLookup,
+    NullableRef<CreateActor> externalCreate,
+    NullableRef<LookupActor> externalLookup,
+    NullableRef<LookupActors> externalLookups,
   ) : super._(
           name,
           missingHostHandling,
@@ -209,6 +236,7 @@ class ActorContext extends BaseContext {
           factories,
           externalCreate,
           externalLookup,
+          externalLookups,
         );
 
   /// The current reference.
@@ -254,6 +282,7 @@ class ActorSystem extends BaseContext {
           [],
           NullableRef(),
           NullableRef(),
+          NullableRef(),
         );
 
   /// Adds a global actor factory for the actor system. A global factory is used
@@ -265,13 +294,17 @@ class ActorSystem extends BaseContext {
     _factories.add(MatcherAndFactory(pathMatcher, factory));
   }
 
-  /// Sets the external create function. This function is used to create actors
+  /// Sets the external create create function. This function is used to create actors
   /// outside of the current [ActorSystem].
-  set externalCreate(ExternalActorCreate? create) => _externalCreate.value = create;
+  set externalCreateActor(CreateActor? create) => _externalCreateActor.value = create;
 
-  /// Sets the external lookup function. This function is used to lookup actors
+  /// Sets the external lookup actor function. This function is used to lookup an actor
   /// outside of the current [ActorSystem].
-  set externalLookup(ExternalActorLookup? lookup) => _externalLookup.value = lookup;
+  set externalLookupActor(LookupActor? lookup) => _externalLookupActor.value = lookup;
+
+  /// Sets the external lookup actors function. This function is used to lookup a actors
+  /// outside of the current [ActorSystem].
+  set externalLookupActors(LookupActors? lookup) => _externalLookupActors.value = lookup;
 }
 
 class MatcherAndFactory {

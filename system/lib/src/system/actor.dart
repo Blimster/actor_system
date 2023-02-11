@@ -15,8 +15,11 @@ typedef Actor = FutureOr<void> Function(ActorContext context, Object? message);
 /// type of the actor to create.
 typedef ActorFactory = FutureOr<Actor> Function(Uri path);
 
-/// Creates an actor for the given [Uri] outside of the current actor system.
-typedef ExternalActorCreate = FutureOr<ActorRef> Function(Uri path, int mailboxSize);
+/// Creates an actor for the given [Uri].
+typedef CreateActor = FutureOr<ActorRef> Function(Uri path, int mailboxSize);
 
-/// Looks up an actor by the given [Uri] outside of the current actor system.
-typedef ExternalActorLookup = FutureOr<ActorRef?> Function(Uri path);
+/// Looks up an actor by the given [Uri].
+typedef LookupActor = FutureOr<ActorRef?> Function(Uri path);
+
+/// Looks up one or more actors by the given [Uri].
+typedef LookupActors = FutureOr<List<ActorRef>> Function(Uri path);

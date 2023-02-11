@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- BREAKING CHANGE: renamed `ExternalActorCreate` to `CreateActor`.
+- BREAKING CHANGE: renamed `ExternalActorLookup` to `LookupActor`.
+- BREAKING CHANGE: renamed `ActorSyste.externalCreate` to `ActorSyste.externalCreateActor`.
+- BREAKING CHANGE: renamed `ActorSyste.externalLookup` to `ActorSyste.externalLlookupActor`.
+- Added `BaseContext.lookupActors()`
+
 ## 0.4.0
 
 - BREAKING CHANGE: moved cluster functionality to an separate package.

@@ -41,6 +41,19 @@ void main() {
       final actor = await system.lookupActor(Uri.parse('/actor'));
       expect(actor?.path, equals(Uri.parse('actor://local/actor')));
     });
+
+    test('actor refs can be looked up', () async {
+      await system.createActor(Uri.parse('/foo'), factory: (path) => (ctx, msg) => null);
+      await system.createActor(Uri.parse('/foo/1'), factory: (path) => (ctx, msg) => null);
+      await system.createActor(Uri.parse('/foo/2'), factory: (path) => (ctx, msg) => null);
+      await system.createActor(Uri.parse('/bar/1'), factory: (path) => (ctx, msg) => null);
+      final actors = await system.lookupActors(Uri.parse('/foo'));
+      expect(actors, hasLength(2));
+      expect(
+        actors.map((e) => e.path),
+        containsAll([Uri.parse('actor://local/foo/1'), Uri.parse('actor://local/foo/2')]),
+      );
+    });
   });
 
   group('system context', () {
@@ -51,7 +64,7 @@ void main() {
     });
 
     test('external create is called', () async {
-      system.externalCreate = (path, mailboxSize) async {
+      system.externalCreateActor = (path, mailboxSize) async {
         return TestRef(path);
       };
       final actorRef = await system.createActor(Uri(host: 'foo', path: '/actor'));
@@ -59,13 +72,21 @@ void main() {
       expect(actorRef.path, equals(Uri(scheme: 'actor', host: 'foo', path: '/actor')));
     });
 
-    test('external lookup is called', () async {
-      system.externalLookup = (path) async {
+    test('external lookup actor is called', () async {
+      system.externalLookupActor = (path) async {
         return TestRef(path);
       };
       final actorRef = await system.lookupActor(Uri(host: 'foo', path: '/actor'));
       expect(actorRef, isA<TestRef>());
       expect(actorRef?.path, equals(Uri(scheme: 'actor', host: 'foo', path: '/actor')));
+    });
+
+    test('external lookup actors is called', () async {
+      system.externalLookupActors = (path) async {
+        return [TestRef(path)];
+      };
+      final actorRef = await system.lookupActors(Uri(host: 'foo', path: '/actor'));
+      expect(actorRef.map((e) => e.path), containsAll([Uri(scheme: 'actor', host: 'foo', path: '/actor')]));
     });
   });
 
