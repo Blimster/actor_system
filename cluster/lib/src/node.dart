@@ -6,6 +6,7 @@ import 'package:actor_cluster/src/base.dart';
 import 'package:actor_cluster/src/codec.dart';
 import 'package:actor_cluster/src/messages/create_actor.dart';
 import 'package:actor_cluster/src/messages/lookup_actor.dart';
+import 'package:actor_cluster/src/messages/lookup_actors.dart';
 import 'package:actor_cluster/src/messages/send_message.dart';
 import 'package:actor_cluster/src/protocol.dart';
 import 'package:actor_cluster/src/ser_des.dart';
@@ -37,6 +38,8 @@ abstract class Node {
   );
 
   Future<ActorRef?> lookupActor(Uri path);
+
+  Future<List<ActorRef>> lookupActors(Uri path);
 }
 
 class LocalNode extends Node {
@@ -76,6 +79,7 @@ class LocalNode extends Node {
         handleClusterInitialized,
         _handleCreateActor,
         _handleLookupActor,
+        _handleLookupActors,
         _handleSendMessage,
       ),
       clusterInitialized,
@@ -123,6 +127,7 @@ class LocalNode extends Node {
         _handleClusterInitialized,
         _handleCreateActor,
         _handleLookupActor,
+        _handleLookupActors,
         _handleSendMessage,
       ),
     );
@@ -235,6 +240,61 @@ class LocalNode extends Node {
         }
         _log.info('lookupActor > null');
         return null;
+      }
+    }
+  }
+
+  @override
+  Future<List<ActorRef>> lookupActors(Uri path) async {
+    _log.info('lookupActors < path=$path');
+
+    final nodeIdFromPath = _getNodeId(path.host);
+    final workerIdFromPath = _getWorkerId(path.host);
+    _log.fine('lookupActors | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath');
+
+    if (nodeIdFromPath.isEmpty) {
+      _log.fine('lookupActors | path does not reference a concrete node');
+      final result = <ActorRef>[];
+      for (final remoteNode in _remoteNodes.values) {
+        _log.fine('lookupActors | lookup on remote node ${remoteNode.nodeId}');
+        result.addAll(await remoteNode.protocol
+            .lookupActors(actorPath(path.path, system: systemName(remoteNode.nodeId, workerIdFromPath))));
+      }
+      _log.fine('lookupActors | lookup on local node');
+      result.addAll(await lookupActors(actorPath(path.path, system: systemName(nodeId, workerIdFromPath))));
+      _log.info('lookupActors > $result');
+      return result;
+    } else if (nodeIdFromPath != nodeId) {
+      _log.fine('lookupActors | path references a remote node');
+      final remoteNode = _remoteNodes[nodeIdFromPath];
+      if (remoteNode == null) {
+        _log.fine('lookupActors | node not found');
+        throw ArgumentError.value(path.host, 'nodeId', 'node not present');
+      }
+      final result =
+          await remoteNode.lookupActors(actorPath(path.path, system: systemName(nodeIdFromPath, workerIdFromPath)));
+      _log.fine('lookupActors > $result');
+      return result;
+    } else {
+      _log.fine('lookupActors | path references the local node');
+      if (workerIdFromPath > 0) {
+        final workerAdapter = _workerAdapters[workerIdFromPath];
+        if (workerAdapter == null) {
+          _log.fine('lookupActors | worker not found');
+          _log.info('lookupActors > []');
+          return [];
+        }
+        final result = await workerAdapter.protocol.lookupActors(path);
+        _log.info('lookupActors > $result');
+        return result;
+      } else {
+        final result = <ActorRef>[];
+        for (final workerAdapter in _workerAdapters.values) {
+          _log.fine('lookupActors | lookup on worker ${workerAdapter.workerId}');
+          result.addAll(await workerAdapter.protocol.lookupActors(path));
+        }
+        _log.info('lookupActors > $result');
+        return result;
       }
     }
   }
@@ -386,6 +446,75 @@ class LocalNode extends Node {
     }
   }
 
+  Future<LookupActorsResponse> _handleLookupActors(Uri path) async {
+    _log.info('handleLookupActors < path=$path');
+
+    final nodeIdFromPath = _getNodeId(path.host);
+    final workerIdFromPath = _getWorkerId(path.host);
+    _log.fine('handleLookupActor | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath');
+
+    if (nodeIdFromPath.isEmpty) {
+      _log.fine('handleLookupActors | path does not reference a concrete node');
+      final result = <Uri>[];
+      for (final remoteNode in _remoteNodes.values) {
+        _log.fine('handleLookupActors | lookup on remote node ${remoteNode.nodeId}');
+        final actorRefs = await remoteNode.protocol
+            .lookupActors(actorPath(path.path, system: systemName(remoteNode.nodeId, workerIdFromPath)));
+        result.addAll(actorRefs.map((e) => e.path));
+      }
+      _log.fine('handleLookupActors | lookup on local node');
+      final localLookup = await _handleLookupActors(actorPath(path.path, system: systemName(nodeId, workerIdFromPath)));
+      result.addAll(localLookup.paths);
+      final response = LookupActorsResponse(result);
+      _log.info('handleLookupActors > $response');
+      return response;
+    } else if (nodeIdFromPath != nodeId) {
+      _log.fine('handleLookupActors | path references a remote node');
+      final remoteNode = _remoteNodes[nodeIdFromPath];
+      if (remoteNode == null) {
+        _log.fine('handleLookupActors | remote node not found');
+        throw ArgumentError.value(path.host, 'nodeId', 'node not present');
+      }
+      final actorRefs = await remoteNode.protocol
+          .lookupActors(actorPath(path.path, system: systemName(nodeIdFromPath, workerIdFromPath)));
+      final response = LookupActorsResponse(actorRefs.map((e) => e.path).toList());
+      _log.info('handleLookupActors > $response');
+      return response;
+    } else {
+      _log.fine('handleLookupActors | path references the local node');
+      if (workerIdFromPath > 0) {
+        final workerAdapter = _workerAdapters[workerIdFromPath];
+        if (workerAdapter == null) {
+          _log.fine('handleLookupActors | worker not found');
+          final response = LookupActorsResponse([]);
+          _log.info('handleLookupActors > $response');
+          return response;
+        }
+        final actorRefs = await workerAdapter.protocol
+            .lookupActors(actorPath(path.path, system: systemName(nodeId, workerAdapter.workerId)));
+        final response = LookupActorsResponse(actorRefs.map((e) => e.path).toList());
+        _log.info('handleLookupActors > $response');
+        return response;
+      } else {
+        final result = <Uri>[];
+        for (final workerAdapter in _workerAdapters.values) {
+          try {
+            _log.fine('handleLookupActors | lookup on worker ${workerAdapter.workerId}');
+            final actorRefs = await workerAdapter.protocol
+                .lookupActors(actorPath(path.path, system: systemName(nodeId, workerAdapter.workerId)));
+            result.addAll(actorRefs.map((e) => e.path));
+          } catch (e, s) {
+            _log.fine('handleLookupActors | $e');
+            _log.fine('handleLookupActors | $s');
+          }
+        }
+        final response = LookupActorsResponse(result);
+        _log.info('handleLookupActors > $response');
+        return response;
+      }
+    }
+  }
+
   Future<SendMessageResponse> _handleSendMessage(
     Uri path,
     Object? message,
@@ -464,6 +593,11 @@ class RemoteNode extends Node {
   @override
   Future<ActorRef?> lookupActor(Uri path) {
     return protocol.lookupActor(path);
+  }
+
+  @override
+  Future<List<ActorRef>> lookupActors(Uri path) async {
+    return protocol.lookupActors(path);
   }
 
   Future<void> close() {

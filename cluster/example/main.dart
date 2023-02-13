@@ -5,7 +5,7 @@ import 'package:actor_cluster/actor_cluster.dart';
 import 'package:actor_system/actor_system.dart';
 import 'package:logging/logging.dart';
 
-class StringDerDes implements SerDes {
+class StringSerDes implements SerDes {
   @override
   Object? deserialize(Uint8List data) {
     return utf8.decode(data);
@@ -21,8 +21,9 @@ class StringDerDes implements SerDes {
 }
 
 void log(LogRecord record) {
-  print('${record.loggerName} ${record.level} ${record.message}');
-  // if (record.loggerName.startsWith('actor://')) {}
+  if (record.loggerName.startsWith('actor://')) {
+    print('${record.loggerName} ${record.level} ${record.message}');
+  }
 }
 
 void main(List<String> args) async {
@@ -30,7 +31,7 @@ void main(List<String> args) async {
 
   final clusterNode = ActorCluster(
     await readConfigFromYaml('example/${args[0]}.yaml'),
-    StringDerDes(),
+    StringSerDes(),
     onLogRecord: log,
   );
 

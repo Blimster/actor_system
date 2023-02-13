@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:actor_cluster/src/messages/cluster_initialized.dart';
 import 'package:actor_cluster/src/messages/create_actor.dart';
 import 'package:actor_cluster/src/messages/lookup_actor.dart';
+import 'package:actor_cluster/src/messages/lookup_actors.dart';
 import 'package:actor_cluster/src/messages/send_message.dart';
 import 'package:actor_cluster/src/ref_proxy.dart';
 import 'package:actor_cluster/src/ser_des.dart';
@@ -15,6 +16,7 @@ import 'package:uuid/uuid.dart';
 const clusterInitializedMessageName = 'ci';
 const createActorMessageName = 'ca';
 const lookupActorMessageName = 'la';
+const lookupActorsMessageName = 'las';
 const sendMessageMessageName = 'sm';
 
 enum ProtocolMessageType {
@@ -57,6 +59,7 @@ class Protocol {
   final void Function(String nodeId) _handleClusterInitialized;
   final Future<CreateActorResponse> Function(Uri path, int? mailboxSize) _handleCreateActor;
   final Future<LookupActorResponse> Function(Uri path) _handleLookupActor;
+  final Future<LookupActorsResponse> Function(Uri path) _handleLookupActors;
   final Future<SendMessageResponse> Function(
       Uri path, Object? message, Uri? sender, Uri? replyTo, String? correlationId) _handleSendMessage;
 
@@ -68,6 +71,7 @@ class Protocol {
     this._handleClusterInitialized,
     this._handleCreateActor,
     this._handleLookupActor,
+    this._handleLookupActors,
     this._handleSendMessage,
   ) : _log = Logger('actor_system.cluster.Protocol:$id') {
     final sub = _channel.stream.listen(_onMessage);
@@ -122,6 +126,26 @@ class Protocol {
     _channel.sink.add(request);
 
     _log.fine('lookupActor >');
+    return completer.future;
+  }
+
+  Future<List<ActorRef>> lookupActors(Uri path) {
+    _log.fine('lookupActors < path=$path');
+
+    final request = ProtocolMessage(
+      ProtocolMessageType.request,
+      lookupActorsMessageName,
+      Uuid().v4(),
+      LookupActorsRequest(path),
+    );
+
+    final completer = Completer<List<ActorRef>>();
+    final timeoutTimer = Timer(_timeout, () => _handleTimeout(request.correlationId));
+    _pendingResponses[request.correlationId] = _PendingResponse(completer, timeoutTimer);
+
+    _channel.sink.add(request);
+
+    _log.fine('lookupActors >');
     return completer.future;
   }
 
@@ -185,6 +209,16 @@ class Protocol {
             );
             _channel.sink.add(response);
             break;
+          case lookupActorsMessageName:
+            final request = message.data as LookupActorsRequest;
+            final response = ProtocolMessage(
+              ProtocolMessageType.response,
+              message.name,
+              message.correlationId,
+              await _handleLookupActors(request.path),
+            );
+            _channel.sink.add(response);
+            break;
           case sendMessageMessageName:
             final request = message.data as SendMessageRequest;
             final response = ProtocolMessage(
@@ -226,6 +260,14 @@ class Protocol {
               } else {
                 pendingResponse.completer.complete(null);
               }
+              break;
+            case lookupActorsMessageName:
+              final response = message.data as LookupActorsResponse;
+              final result = <ActorRef>[];
+              for (final responsePath in response.paths) {
+                result.add(ActorRefProxy(responsePath, sendMessage));
+              }
+              pendingResponse.completer.complete(result);
               break;
             case sendMessageMessageName:
               final response = message.data as SendMessageResponse;

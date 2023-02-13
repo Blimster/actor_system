@@ -33,6 +33,11 @@ class ClusterContext implements BaseContext {
   Future<ActorRef?> lookupActor(Uri path) {
     return _localNode.lookupActor(path);
   }
+
+  @override
+  Future<List<ActorRef>> lookupActors(Uri path) {
+    return _localNode.lookupActors(path);
+  }
 }
 
 Node findNode(List<Node> nodes, Uri path) {

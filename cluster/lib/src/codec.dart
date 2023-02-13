@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:actor_cluster/src/messages/cluster_initialized.dart';
 import 'package:actor_cluster/src/messages/create_actor.dart';
 import 'package:actor_cluster/src/messages/lookup_actor.dart';
+import 'package:actor_cluster/src/messages/lookup_actors.dart';
 import 'package:actor_cluster/src/messages/send_message.dart';
 import 'package:actor_cluster/src/protocol.dart';
 import 'package:actor_cluster/src/ser_des.dart';
@@ -30,6 +31,15 @@ PackableData _createMessage(ProtocolMessageType messageType, String messageName,
           return LookupActorRequest.unpack(messageData);
         case ProtocolMessageType.response:
           return LookupActorResponse.unpack(messageData);
+        default:
+          throw StateError('protocol message type $messageType is not supported');
+      }
+    case lookupActorsMessageName:
+      switch (messageType) {
+        case ProtocolMessageType.request:
+          return LookupActorsRequest.unpack(messageData);
+        case ProtocolMessageType.response:
+          return LookupActorsResponse.unpack(messageData);
         default:
           throw StateError('protocol message type $messageType is not supported');
       }
