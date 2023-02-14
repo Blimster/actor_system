@@ -71,16 +71,16 @@ class LocalNode extends Node {
       nodeId,
       uuid,
       workers,
-      Protocol(
+      ClusterProtocol(
         'remote@$nodeId',
         MessageChannel(reader, writer, _serDes),
         _serDes,
         timeout,
-        handleClusterInitialized,
         _handleCreateActor,
         _handleLookupActor,
         _handleLookupActors,
         _handleSendMessage,
+        handleClusterInitialized,
       ),
       clusterInitialized,
     );
@@ -119,12 +119,11 @@ class LocalNode extends Node {
       nodeId,
       workerId,
       isolate,
-      Protocol(
+      ActorProtocol(
         'worker@$workerId',
         channel,
         _serDes,
         timeout,
-        _handleClusterInitialized,
         _handleCreateActor,
         _handleLookupActor,
         _handleLookupActors,
@@ -304,10 +303,6 @@ class LocalNode extends Node {
       await workerAdapter.stop();
     }
     _workerAdapters.clear();
-  }
-
-  void _handleClusterInitialized(String nodeId) {
-    throw StateError('init cluster message must not be sent to a local node');
   }
 
   Future<CreateActorResponse> _handleCreateActor(Uri path, int? mailboxSize) async {
@@ -572,7 +567,7 @@ class LocalNode extends Node {
 class RemoteNode extends Node {
   @override
   final int workers;
-  final Protocol protocol;
+  final ClusterProtocol protocol;
   final bool clusterInitialized;
 
   RemoteNode(super.nodeId, super.uuid, this.workers, this.protocol, this.clusterInitialized);
@@ -625,7 +620,7 @@ class _WorkerAdapter {
   final String nodeId;
   final int workerId;
   final Isolate isolate;
-  final Protocol protocol;
+  final ActorProtocol protocol;
 
   _WorkerAdapter(this.nodeId, this.workerId, this.isolate, this.protocol);
 

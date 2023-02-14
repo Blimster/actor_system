@@ -41,7 +41,7 @@ class Worker {
   final IsolateChannel<ProtocolMessage> channel;
   final SerDes serDes;
   final AddActorFactories? addActorFactories;
-  late final Protocol protocol;
+  late final ActorProtocol protocol;
 
   Worker(
     this.nodeId,
@@ -52,21 +52,16 @@ class Worker {
     this.addActorFactories,
     Duration timeout,
   ) {
-    protocol = Protocol(
+    protocol = ActorProtocol(
       'worker',
       channel,
       serDes,
       timeout,
-      _handleClusterInitialized,
       _handleCreateActor,
       _handleLookupActor,
       _handleLookupActors,
       _handleSendMessage,
     );
-  }
-
-  void _handleClusterInitialized(String nodeId) {
-    throw StateError('init cluster message must not be sent to a worker');
   }
 
   Future<CreateActorResponse> _handleCreateActor(Uri path, int? mailboxSize) async {
