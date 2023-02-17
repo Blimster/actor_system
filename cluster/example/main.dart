@@ -21,9 +21,8 @@ class StringSerDes implements SerDes {
 }
 
 void log(LogRecord record) {
-  if (record.loggerName.startsWith('actor://')) {
-    print('${record.loggerName} ${record.level} ${record.message}');
-  }
+  print('${record.loggerName} ${record.level} ${record.message}');
+  if (record.loggerName.startsWith('actor://')) {}
 }
 
 void main(List<String> args) async {

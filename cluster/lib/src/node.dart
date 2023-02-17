@@ -58,6 +58,8 @@ class LocalNode extends Node {
 
   void addRemoteNode(
     String nodeId,
+    String host,
+    int port,
     String uuid,
     int workers,
     StreamReader reader,
@@ -83,6 +85,8 @@ class LocalNode extends Node {
         handleClusterInitialized,
       ),
       clusterInitialized,
+      host,
+      port,
     );
     _log.info('addRemoteNode >');
   }
@@ -91,6 +95,10 @@ class LocalNode extends Node {
     _log.info('removeRemoteNode < nodeId=$nodeId');
     _remoteNodes.remove(nodeId);
     _log.info('removeRemoteNode >');
+  }
+
+  List<RemoteNode> remoteNodes() {
+    return _remoteNodes.values.toList();
   }
 
   bool isConnected(String nodeId) {
@@ -569,8 +577,10 @@ class RemoteNode extends Node {
   final int workers;
   final ClusterProtocol protocol;
   final bool clusterInitialized;
+  final String host;
+  final int port;
 
-  RemoteNode(super.nodeId, super.uuid, this.workers, this.protocol, this.clusterInitialized);
+  RemoteNode(super.nodeId, super.uuid, this.workers, this.protocol, this.clusterInitialized, this.host, this.port);
 
   @override
   bool get isLocal => false;

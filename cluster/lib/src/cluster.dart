@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -52,6 +53,7 @@ class ActorCluster {
   final Config _config;
   final Level? _logLevel;
   final void Function(LogRecord)? _onLogRecord;
+  final Map<String, ConfigNode> _missingAdditionalNodes = {};
   late final LocalNode _localNode;
   bool _clusterInitialized = false;
   InitCluster? _initCluster;
@@ -126,7 +128,7 @@ class ActorCluster {
     _log.info('init | server socket bound and waiting for connections');
 
     // periodically connect to other seed nodes
-    if (_hasMissingSeedNodes()) {
+    if (_hasMissingNodes()) {
       _startConnectingToMissingNodes();
     } else {
       _stopConnectingToMissingNodes();
@@ -170,47 +172,54 @@ class ActorCluster {
       }
 
       // read message content
-      final handshakeRequest = HandshakeRequest.fromJson(message.content);
+      final handshakeRequest = HandshakeRequest.fromJson(json.decode(message.content));
       _log.info('handleNewConnection | handshake request received');
+      _log.info(
+          'handleNewConnection | nodeId=${handshakeRequest.node.nodeId}, host=${handshakeRequest.node.host}, port=${handshakeRequest.node.port}');
 
       // check secret
       if (handshakeRequest.secret != _config.secret) {
         throw StateError('invalid handshake secret');
       }
       _log.info('handleNewConnection | secret is valid');
-      _log.info('handleNewConnection | nodeId=${handshakeRequest.nodeId}');
+
+      // check seed node ids
+      final localSeedNodeIds = _config.seedNodes.map((e) => e.id).toSet();
+      final remoteSeedNodeIds = handshakeRequest.seedNodeIds.toSet();
+      if (localSeedNodeIds.length != remoteSeedNodeIds.length || !localSeedNodeIds.containsAll(remoteSeedNodeIds)) {
+        throw StateError('seed node mismatch: local=$localSeedNodeIds, remote=$remoteSeedNodeIds');
+      }
+      _log.info('handleNewConnection | seed node ids are matching');
 
       // check if node is already connected
-      if (_localNode.isConnected(handshakeRequest.nodeId)) {
+      if (_localNode.isConnected(handshakeRequest.node.nodeId)) {
         throw StateError('node already connected');
       }
 
       // check same node
-      if (handshakeRequest.nodeId == _config.localNode.id) {
+      if (handshakeRequest.node.nodeId == _config.localNode.id) {
         throw StateError('same node id');
-      }
-
-      // check for seed node
-      if (!_missingSeedNodes().map((e) => e.id).contains(handshakeRequest.nodeId)) {
-        throw StateError('not a seed node');
       }
 
       // send handshake response
       await socketAdapter.sendMessage(SocketMessage(
         handshakeResponseType,
-        HandshakeResponse(
+        json.encode(HandshakeResponse(
           handshakeRequest.correlationId,
-          _config.localNode.id,
+          HandshakeNode(_config.localNode.id, _config.localNode.host, _config.localNode.port),
           _uuid,
           _config.workers,
+          _localNode.remoteNodes().map((e) => HandshakeNode(e.nodeId, e.host, e.port)).toList(),
           _clusterInitialized,
-        ).toJson(),
+        ).toJson()),
       ));
 
-      if (!_localNode.isConnected(handshakeRequest.nodeId)) {
+      if (!_localNode.isConnected(handshakeRequest.node.nodeId)) {
         // store connection
         _localNode.addRemoteNode(
-          handshakeRequest.nodeId,
+          handshakeRequest.node.nodeId,
+          handshakeRequest.node.host,
+          handshakeRequest.node.port,
           handshakeRequest.uuid,
           handshakeRequest.workers,
           socketAdapter.streamReader,
@@ -221,14 +230,14 @@ class ActorCluster {
         );
 
         // handle closed connection
-        closedConnectionHandler.nodeId = handshakeRequest.nodeId;
+        closedConnectionHandler.nodeId = handshakeRequest.node.nodeId;
       } else {
         _log.info('handleNewConnection | remote node already present. closing socket...');
         socket.destroy();
         _log.info('handleNewConnection | socket closed');
       }
 
-      if (!_hasMissingSeedNodes()) {
+      if (!_hasMissingNodes()) {
         _stopConnectingToMissingNodes();
         await _startNode();
         await _initializeCluster();
@@ -258,20 +267,23 @@ class ActorCluster {
       _localNode.removeRemoteNode(nodeId);
       _log.info('handleClosedConnection | remote node for nodeId=$nodeId removed');
     }
-    if (_hasMissingSeedNodes()) {
+    if (_hasMissingNodes()) {
       _startConnectingToMissingNodes();
     }
     _log.info('handleClosedConnection >');
   }
 
-  Future<void> _connectToSeedNodes() async {
-    _log.info('connectToSeedNodes <');
+  Future<void> _connectToNodes() async {
+    _log.info('connectToNodes <');
     final missingSeedNodes = _missingSeedNodes();
-    _log.info('connectToSeedNodes | missingSeedNodes=${missingSeedNodes.map((e) => e.id).toList()}');
-    for (final node in missingSeedNodes) {
+    final missingAdditionalNodes = _missingAdditionalNodes.values.toList();
+    final missingNodes = missingSeedNodes + missingAdditionalNodes;
+    _log.info('connectToNodes | missingSeedNodes=${missingSeedNodes.map((e) => e.id).toList()}');
+    _log.info('connectToNodes | missingAdditionalNodes=${missingAdditionalNodes.map((e) => e.id).toList()}');
+    for (final node in missingNodes) {
       Socket? socketToClose;
       try {
-        _log.info('connectToSeedNodes | trying to connect to node ${node.id}');
+        _log.info('connectToNodes | trying to connect to node ${node.id}');
 
         // open socket connection
         final closedConnectionHandler = ClosedConnectionHandler(_handleClosedConnection);
@@ -279,33 +291,34 @@ class ActorCluster {
         final socketAdapter = SocketAdapter(socket);
         socketAdapter.bind(onDone: closedConnectionHandler);
         socketToClose = socket;
-        _log.info('connectToSeedNodes | connection established');
+        _log.info('connectToNodes | connection established');
 
         // send handshake request
-        _log.info('connectToSeedNodes | sending handshake request...');
+        _log.info('connectToNodes | sending handshake request...');
         final correlationId = Uuid().v4();
         socketAdapter.sendMessage(SocketMessage(
           handshakeRequestType,
-          HandshakeRequest(
+          json.encode(HandshakeRequest(
             correlationId,
+            _config.seedNodes.map((e) => e.id).toList(),
             _config.secret,
-            _config.localNode.id,
+            HandshakeNode(_config.localNode.id, _config.localNode.host, _config.localNode.port),
             _uuid,
             _config.workers,
             _clusterInitialized,
-          ).toJson(),
+          ).toJson()),
         ));
 
         // read response type and check it
-        _log.info('connectToSeedNodes | waiting for handshake response...');
+        _log.info('connectToNodes | waiting for handshake response...');
         final response = await socketAdapter.receiveData();
         if (response.type != handshakeResponseType) {
           throw StateError('invalid handshake response type');
         }
 
         // read handshake response
-        final handshakeResponse = HandshakeResponse.fromJson(response.content);
-        _log.info('connectToSeedNodes | received handshake response');
+        final handshakeResponse = HandshakeResponse.fromJson(json.decode(response.content));
+        _log.info('connectToNodes | received handshake response');
 
         // check correlation id
         if (handshakeResponse.correlationId != correlationId) {
@@ -313,8 +326,8 @@ class ActorCluster {
         }
 
         // check node id
-        if (handshakeResponse.nodeId != node.id) {
-          throw StateError('invalid handshake response node id (${handshakeResponse.nodeId})');
+        if (handshakeResponse.node.nodeId != node.id) {
+          throw StateError('invalid handshake response node id (${handshakeResponse.node.nodeId})');
         }
 
         // check uuid
@@ -322,10 +335,20 @@ class ActorCluster {
           throw StateError('remote node has same uuid');
         }
 
+        for (final additionalNode in handshakeResponse.connectedAdditionalNodes) {
+          if (!_missingAdditionalNodes.containsKey(additionalNode.nodeId) &&
+              !_localNode.isConnected(additionalNode.nodeId)) {
+            _missingAdditionalNodes[additionalNode.nodeId] =
+                ConfigNode(additionalNode.host, additionalNode.port, additionalNode.nodeId);
+          }
+        }
+
         // store connection
-        if (!_localNode.isConnected(handshakeResponse.nodeId)) {
+        if (!_localNode.isConnected(handshakeResponse.node.nodeId)) {
           _localNode.addRemoteNode(
-            handshakeResponse.nodeId,
+            handshakeResponse.node.nodeId,
+            handshakeResponse.node.host,
+            handshakeResponse.node.port,
             handshakeResponse.uuid,
             handshakeResponse.workers,
             socketAdapter.streamReader,
@@ -334,27 +357,28 @@ class ActorCluster {
             handshakeResponse.clusterInitialized,
             _handleClusterInitialized,
           );
-          closedConnectionHandler.nodeId = handshakeResponse.nodeId;
+          _missingAdditionalNodes.remove(handshakeResponse.node.nodeId);
+          closedConnectionHandler.nodeId = handshakeResponse.node.nodeId;
         } else {
-          _log.info('connectToSeedNodes | remote node already present. closing socket...');
+          _log.info('connectToNodes | remote node already present. closing socket...');
           socket.destroy();
-          _log.info('connectToSeedNodes | socket closed');
+          _log.info('connectToNodes | socket closed');
         }
       } catch (e) {
-        _log.info('connectToSeedNodes | error: $e');
-        _log.info('connectToSeedNodes | closing socket...');
+        _log.info('connectToNodes | error: $e');
+        _log.info('connectToNodes | closing socket...');
         socketToClose?.destroy();
-        _log.info('connectToSeedNodes | socket closed');
+        _log.info('connectToNodes | socket closed');
       }
     }
     // start node
-    if (!_hasMissingSeedNodes()) {
+    if (!_hasMissingNodes()) {
       _stopConnectingToMissingNodes();
       await _startNode();
       await _initializeCluster();
     }
 
-    _log.info('connectToSeedNodes >');
+    _log.info('connectToNodes >');
   }
 
   List<ConfigNode> _missingSeedNodes() {
@@ -364,8 +388,8 @@ class ActorCluster {
         .toList();
   }
 
-  bool _hasMissingSeedNodes() {
-    return _missingSeedNodes().isNotEmpty;
+  bool _hasMissingNodes() {
+    return _missingSeedNodes().isNotEmpty || _missingAdditionalNodes.isNotEmpty;
   }
 
   bool _isLeader() {
@@ -396,11 +420,11 @@ class ActorCluster {
 
   void _startConnectingToMissingNodes() {
     _log.info('startConnectingToMissingNodes <');
-    if (_connectTimer == null && _hasMissingSeedNodes()) {
+    if (_connectTimer == null && _hasMissingNodes()) {
       _log.info('startConnectingToMissingNodes | starting periodic timer');
       _connectTimer = Timer.periodic(
         Duration(seconds: 5),
-        (_) => _connectToSeedNodes(),
+        (_) => _connectToNodes(),
       );
       _log.info('startConnectingToMissingNodes | timer started');
     }

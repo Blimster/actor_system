@@ -16,6 +16,18 @@
             "type": "dart",
             "program": "cluster/example/main.dart",
             "args": ["config2"]
+        }, {
+            "name": "node 3",
+            "request": "launch",
+            "type": "dart",
+            "program": "cluster/example/main.dart",
+            "args": ["config3"]
+        }, {
+            "name": "node 4",
+            "request": "launch",
+            "type": "dart",
+            "program": "cluster/example/main.dart",
+            "args": ["config4"]
         }
     ]
 }
