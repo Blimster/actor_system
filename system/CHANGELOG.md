@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Added helper to copy an Uri.
+
 ## 0.5.0
 
 - BREAKING CHANGE: renamed `ExternalActorCreate` to `CreateActor`.

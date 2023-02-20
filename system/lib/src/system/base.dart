@@ -39,5 +39,16 @@ Uri localActorPath(String path) {
 extension UriExtension on Uri {
   /// Ensures that the right scheme is set and only applies
   /// relevant parts of the Uri.
-  Uri validActorPath() => Uri(scheme: actorScheme, host: host, path: path);
+  Uri validActorPath() => Uri(scheme: actorScheme, host: host, path: path, fragment: fragment);
+
+  /// Creates a copy of this path with the possibility to
+  /// adapt the system, path and fragment.
+  Uri copy({String? system, String? path, String? fragment}) {
+    return Uri(
+      scheme: actorScheme,
+      host: system ?? host,
+      path: path ?? this.path,
+      fragment: fragment ?? this.fragment,
+    );
+  }
 }
