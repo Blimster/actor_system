@@ -1,0 +1,7 @@
+node:
+  host: "localhost"
+  port: 8001
+  id: node1
+workers: 2
+tags:
+  - foo

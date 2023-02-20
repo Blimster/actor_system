@@ -52,7 +52,8 @@ class ActorCluster {
   final _log = Logger('actor_system.cluster.ActorClusterNode');
   final _uuid = Uuid().v4();
   final SerDes _serDes;
-  final Config _config;
+  final ClusterConfig _clusterConfig;
+  final NodeConfig _nodeConfig;
   final Level? _logLevel;
   final void Function(LogRecord)? _onLogRecord;
   final Map<String, ConfigNode> _missingAdditionalNodes = {};
@@ -64,8 +65,14 @@ class ActorCluster {
   ServerSocket? _serverSocket;
   Timer? _connectTimer;
 
-  ActorCluster(Config config, SerDes serDes, {Level? logLevel, void Function(LogRecord)? onLogRecord})
-      : _config = config,
+  ActorCluster(
+    ClusterConfig clusterConfig,
+    NodeConfig nodeConfig,
+    SerDes serDes, {
+    Level? logLevel,
+    void Function(LogRecord)? onLogRecord,
+  })  : _clusterConfig = clusterConfig,
+        _nodeConfig = nodeConfig,
         _serDes = serDes,
         _logLevel = logLevel,
         _onLogRecord = onLogRecord;
@@ -91,37 +98,41 @@ class ActorCluster {
 
     // read config
     _log.info('init | configuration entries:');
-    _log.info('init | - seedNodes: ${_config.seedNodes}');
-    _log.info('init | - localNode: ${_config.localNode}');
-    _log.info('init | - workers: ${_config.workers}');
-    _log.info('init | - secret: ${'*' * _config.secret.length}');
-    _log.info('init | - timeout: ${_config.timeout}');
-    _log.info('init | - node uuid: $_uuid');
+    _log.info('init | - cluster:');
+    _log.info('init |   - nodes: ${_clusterConfig.nodes}');
+    _log.info('init |   - tags: ${_clusterConfig.tags}');
+    _log.info('init |   - timeout: ${_clusterConfig.timeout}');
+    _log.info('init |   - secret: ${'*' * _clusterConfig.secret.length}');
+    _log.info('init | - node:');
+    _log.info('init |   - node: ${_nodeConfig.node}');
+    _log.info('init |   - workers: ${_nodeConfig.workers}');
+    _log.info('init |   - tags: ${_nodeConfig.tags}');
+    _log.info('init |   - uuid: $_uuid');
 
     // validate config
-    if (_config.localNode.id == localSystem) {
+    if (_nodeConfig.node.id == localSystem) {
       throw ArgumentError.value(
         'localNode.id',
-        _config.localNode.id,
+        _nodeConfig.node.id,
         '"$localSystem" is reserved.',
       );
     }
-    final uri = Uri.tryParse('//${_config.localNode.id}:8000/');
+    final uri = Uri.tryParse('//${_nodeConfig.node.id}:8000/');
     if (uri == null) {
       throw ArgumentError.value(
         'localNode.id',
-        _config.localNode.id,
+        _nodeConfig.node.id,
         'must be a valid host in an URI',
       );
     }
 
-    _localNode = LocalNode(_serDes, _config.localNode.id, _uuid);
+    _localNode = LocalNode(_serDes, _nodeConfig.node.id, _uuid);
 
     // bind server socket
-    _log.info('init | binding server socket to ${_config.localNode}...');
+    _log.info('init | binding server socket to ${_nodeConfig.node}...');
     final serverSocket = await ServerSocket.bind(
-      _config.localNode.host,
-      _config.localNode.port,
+      _nodeConfig.node.host,
+      _nodeConfig.node.port,
     );
     _serverSocket = serverSocket;
 
@@ -182,13 +193,13 @@ class ActorCluster {
           'handleNewConnection | nodeId=${handshakeRequest.node.nodeId}, host=${handshakeRequest.node.host}, port=${handshakeRequest.node.port}');
 
       // check secret
-      if (handshakeRequest.secret != _config.secret) {
+      if (handshakeRequest.secret != _clusterConfig.secret) {
         throw StateError('invalid handshake secret');
       }
       _log.info('handleNewConnection | secret is valid');
 
       // check seed node ids
-      final localSeedNodeIds = _config.seedNodes.map((e) => e.id).toSet();
+      final localSeedNodeIds = _clusterConfig.nodes.map((e) => e.id).toSet();
       final remoteSeedNodeIds = handshakeRequest.seedNodeIds.toSet();
       if (localSeedNodeIds.length != remoteSeedNodeIds.length || !localSeedNodeIds.containsAll(remoteSeedNodeIds)) {
         throw StateError('seed node mismatch: local=$localSeedNodeIds, remote=$remoteSeedNodeIds');
@@ -201,7 +212,7 @@ class ActorCluster {
       }
 
       // check same node
-      if (handshakeRequest.node.nodeId == _config.localNode.id) {
+      if (handshakeRequest.node.nodeId == _nodeConfig.node.id) {
         throw StateError('same node id');
       }
 
@@ -210,9 +221,10 @@ class ActorCluster {
         handshakeResponseType,
         json.encode(HandshakeResponse(
           handshakeRequest.correlationId,
-          HandshakeNode(_config.localNode.id, _config.localNode.host, _config.localNode.port),
+          HandshakeNode(_nodeConfig.node.id, _nodeConfig.node.host, _nodeConfig.node.port),
           _uuid,
-          _config.workers,
+          _nodeConfig.workers,
+          _nodeConfig.tags,
           _localNode.remoteNodes().map((e) => HandshakeNode(e.nodeId, e.host, e.port)).toList(),
           _clusterInitialized,
         ).toJson()),
@@ -226,9 +238,10 @@ class ActorCluster {
           handshakeRequest.node.port,
           handshakeRequest.uuid,
           handshakeRequest.workers,
+          handshakeRequest.tags,
           socketAdapter.streamReader,
           socketAdapter.socket,
-          Duration(seconds: _config.timeout),
+          Duration(seconds: _clusterConfig.timeout),
           handshakeRequest.clusterInitialized,
           _handleClusterInitialized,
         );
@@ -303,11 +316,12 @@ class ActorCluster {
           handshakeRequestType,
           json.encode(HandshakeRequest(
             correlationId,
-            _config.seedNodes.map((e) => e.id).toList(),
-            _config.secret,
-            HandshakeNode(_config.localNode.id, _config.localNode.host, _config.localNode.port),
+            _clusterConfig.nodes.map((e) => e.id).toList(),
+            _clusterConfig.secret,
+            HandshakeNode(_nodeConfig.node.id, _nodeConfig.node.host, _nodeConfig.node.port),
             _uuid,
-            _config.workers,
+            _nodeConfig.workers,
+            _nodeConfig.tags,
             _clusterInitialized,
           ).toJson()),
         ));
@@ -354,9 +368,10 @@ class ActorCluster {
             handshakeResponse.node.port,
             handshakeResponse.uuid,
             handshakeResponse.workers,
+            handshakeResponse.tags,
             socketAdapter.streamReader,
             socketAdapter.socket,
-            Duration(seconds: _config.timeout),
+            Duration(seconds: _clusterConfig.timeout),
             handshakeResponse.clusterInitialized,
             _handleClusterInitialized,
           );
@@ -374,7 +389,7 @@ class ActorCluster {
         _log.info('connectToNodes | socket closed');
       }
     }
-    // start node
+    // initialize cluster
     if (!_hasMissingNodes()) {
       _stopConnectingToMissingNodes();
       await _initializeCluster();
@@ -384,14 +399,14 @@ class ActorCluster {
   }
 
   List<ConfigNode> _missingSeedNodes() {
-    return _config.seedNodes
-        .where((node) => node.id != _config.localNode.id)
+    return _clusterConfig.nodes
+        .where((node) => node.id != _nodeConfig.node.id)
         .where((node) => !_localNode.isConnected(node.id))
         .toList();
   }
 
   bool _hasMissingNodes() {
-    return _missingSeedNodes().isNotEmpty || _missingAdditionalNodes.isNotEmpty;
+    return _missingSeedNodes().isNotEmpty || _missingAdditionalNodes.isNotEmpty || !_allRequiredTagsAvailable();
   }
 
   bool _isLeader() {
@@ -401,6 +416,37 @@ class ActorCluster {
     }
     final smallestRemoteUuid = remoteUuids.first;
     return _uuid.compareTo(smallestRemoteUuid) < 0;
+  }
+
+  bool _allRequiredTagsAvailable() {
+    _log.info('allRequiredTagsPresent <');
+    final availableTags = <String, int>{};
+    for (final remoteNode in _localNode.remoteNodes()) {
+      _log.info('allRequiredTagsPresent | node=${remoteNode.nodeId}, tags=${remoteNode.tags}');
+      for (final tag in remoteNode.tags) {
+        availableTags.putIfAbsent(tag, () => 0);
+        availableTags[tag] = availableTags[tag]! + 1;
+      }
+    }
+    _log.info('allRequiredTagsPresent | node=${_nodeConfig.node.id}, tags=${_nodeConfig.tags}');
+    for (final tag in _nodeConfig.tags) {
+      availableTags.putIfAbsent(tag, () => 0);
+      availableTags[tag] = availableTags[tag]! + 1;
+    }
+    _log.info('allRequiredTagsPresent | available tags=$availableTags');
+    _log.info('allRequiredTagsPresent | required tags=${_clusterConfig.tags}');
+
+    var result = true;
+    for (final requiredTag in _clusterConfig.tags.entries) {
+      if (!availableTags.containsKey(requiredTag.key) || availableTags[requiredTag.key]! < requiredTag.value) {
+        _log.info('allRequiredTagsPresent | missing nodes for tag ${requiredTag.key}');
+        result = false;
+        break;
+      }
+    }
+
+    _log.info('allRequiredTagsPresent > $result');
+    return result;
   }
 
   bool _isClusterInitialized() {
@@ -450,26 +496,26 @@ class ActorCluster {
     _log.info('startNode <');
     _log.info('startNode | state is ${_state.name}');
     if (_state == NodeState.starting) {
-      for (var workerId = 1; workerId <= _config.workers; workerId++) {
+      for (var workerId = 1; workerId <= _nodeConfig.workers; workerId++) {
         final receivePort = ReceivePort();
         final isolate = await Isolate.spawn<WorkerBootstrapMsg>(
           bootstrapWorker,
           WorkerBootstrapMsg(
-            _config.localNode.id,
+            _nodeConfig.node.id,
             workerId,
-            _config.timeout,
+            _clusterConfig.timeout,
             _addActorFactories,
             _serDes,
             receivePort.sendPort,
             _logLevel,
             _onLogRecord,
           ),
-          debugName: '${_config.localNode.id}_$workerId',
+          debugName: '${_nodeConfig.node.id}_$workerId',
         );
         _localNode.addWorker(
-            workerId, isolate, IsolateChannel.connectReceive(receivePort), Duration(seconds: _config.timeout));
+            workerId, isolate, IsolateChannel.connectReceive(receivePort), Duration(seconds: _clusterConfig.timeout));
       }
-      _log.info('startNode | ${_config.workers} worker(s) started');
+      _log.info('startNode | ${_nodeConfig.workers} worker(s) started');
       _state = NodeState.started;
       _log.info('startNode | set state to ${_state.name}');
     } else {

@@ -30,6 +30,7 @@ class HandshakeRequest {
   final HandshakeNode node;
   final String uuid;
   final int workers;
+  final List<String> tags;
   final bool clusterInitialized;
 
   HandshakeRequest(
@@ -39,6 +40,7 @@ class HandshakeRequest {
     this.node,
     this.uuid,
     this.workers,
+    this.tags,
     this.clusterInitialized,
   );
 
@@ -50,6 +52,7 @@ class HandshakeRequest {
       HandshakeNode.fromJson(json['node']),
       json['uuid'],
       json['workers'],
+      (json['tags'] as List).map((e) => e.toString()).toList(),
       json['clusterInitialized'],
     );
   }
@@ -61,6 +64,7 @@ class HandshakeRequest {
         'node': node.toJson(),
         'uuid': uuid,
         'workers': workers,
+        'tags': tags,
         'clusterInitialized': clusterInitialized,
       };
 }
@@ -70,6 +74,7 @@ class HandshakeResponse {
   final HandshakeNode node;
   final String uuid;
   final int workers;
+  final List<String> tags;
   final List<HandshakeNode> connectedAdditionalNodes;
   final bool clusterInitialized;
 
@@ -78,6 +83,7 @@ class HandshakeResponse {
     this.node,
     this.uuid,
     this.workers,
+    this.tags,
     this.connectedAdditionalNodes,
     this.clusterInitialized,
   );
@@ -88,6 +94,7 @@ class HandshakeResponse {
       HandshakeNode.fromJson(json['node']),
       json['uuid'],
       json['workers'],
+      (json['tags'] as List).map((e) => e.toString()).toList(),
       (json['connectedAdditionalNodes'] as List).map((e) => HandshakeNode.fromJson(e)).toList(),
       json['clusterInitialized'],
     );
@@ -98,6 +105,7 @@ class HandshakeResponse {
         'node': node.toJson(),
         'uuid': uuid,
         'workers': workers,
+        'tags': tags,
         'connectedAdditionalNodes': connectedAdditionalNodes.map((e) => e.toJson()).toList(),
         'clusterInitialized': clusterInitialized,
       };

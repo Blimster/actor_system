@@ -1,0 +1,5 @@
+node:
+  host: "localhost"
+  port: 8004
+  id: node4
+workers: 2

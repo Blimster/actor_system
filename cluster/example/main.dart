@@ -29,7 +29,8 @@ void main(List<String> args) async {
   Logger.root.onRecord.listen(log);
 
   final clusterNode = ActorCluster(
-    await readConfigFromYaml('example/${args[0]}.yaml'),
+    await readClusterConfigFromYaml('example/cluster.yaml'),
+    await readNodeConfigFromYaml('example/${args[0]}.yaml'),
     StringSerDes(),
     onLogRecord: log,
   );

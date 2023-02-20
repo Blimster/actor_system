@@ -62,6 +62,7 @@ class LocalNode extends Node {
     int port,
     String uuid,
     int workers,
+    List<String> tags,
     StreamReader reader,
     Sink<List<int>> writer,
     Duration timeout,
@@ -73,6 +74,7 @@ class LocalNode extends Node {
       nodeId,
       uuid,
       workers,
+      tags,
       ClusterProtocol(
         'remote@$nodeId',
         MessageChannel(reader, writer, _serDes),
@@ -575,12 +577,22 @@ class LocalNode extends Node {
 class RemoteNode extends Node {
   @override
   final int workers;
+  final List<String> tags;
   final ClusterProtocol protocol;
   final bool clusterInitialized;
   final String host;
   final int port;
 
-  RemoteNode(super.nodeId, super.uuid, this.workers, this.protocol, this.clusterInitialized, this.host, this.port);
+  RemoteNode(
+    super.nodeId,
+    super.uuid,
+    this.workers,
+    this.tags,
+    this.protocol,
+    this.clusterInitialized,
+    this.host,
+    this.port,
+  );
 
   @override
   bool get isLocal => false;

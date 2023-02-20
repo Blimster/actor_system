@@ -9,25 +9,25 @@
             "request": "launch",
             "type": "dart",
             "program": "cluster/example/main.dart",
-            "args": ["config1"],
+            "args": ["node1"],
         }, {
             "name": "node 2",
             "request": "launch",
             "type": "dart",
             "program": "cluster/example/main.dart",
-            "args": ["config2"]
+            "args": ["node2"]
         }, {
             "name": "node 3",
             "request": "launch",
             "type": "dart",
             "program": "cluster/example/main.dart",
-            "args": ["config3"]
+            "args": ["node3"]
         }, {
             "name": "node 4",
             "request": "launch",
             "type": "dart",
             "program": "cluster/example/main.dart",
-            "args": ["config4"]
+            "args": ["node4"]
         }
     ]
 }
