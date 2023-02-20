@@ -32,6 +32,8 @@ enum NodeState {
   created,
   starting,
   started,
+  connecting,
+  connected,
   stopped,
 }
 
@@ -127,12 +129,14 @@ class ActorCluster {
     serverSocket.listen(_handleNewConnection);
     _log.info('init | server socket bound and waiting for connections');
 
+    // start node workers
+    await _startNode();
+
     // periodically connect to other seed nodes
     if (_hasMissingNodes()) {
       _startConnectingToMissingNodes();
     } else {
       _stopConnectingToMissingNodes();
-      await _startNode();
       await _initializeCluster();
     }
 
@@ -239,7 +243,6 @@ class ActorCluster {
 
       if (!_hasMissingNodes()) {
         _stopConnectingToMissingNodes();
-        await _startNode();
         await _initializeCluster();
       }
     } catch (e, s) {
@@ -374,7 +377,6 @@ class ActorCluster {
     // start node
     if (!_hasMissingNodes()) {
       _stopConnectingToMissingNodes();
-      await _startNode();
       await _initializeCluster();
     }
 
@@ -470,8 +472,6 @@ class ActorCluster {
       _log.info('startNode | ${_config.workers} worker(s) started');
       _state = NodeState.started;
       _log.info('startNode | set state to ${_state.name}');
-    } else if (_state == NodeState.started) {
-      _log.info('startNode | skipped starting workers');
     } else {
       throw StateError('startNode() was called in state $_state, which is an error!');
     }
