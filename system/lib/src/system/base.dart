@@ -27,8 +27,8 @@ const localSystem = 'local';
 const actorScheme = 'actor';
 
 /// Creates an [Uri] valid for an actor path.
-Uri actorPath(String path, {String? system}) {
-  return Uri(scheme: actorScheme, host: system, path: path);
+Uri actorPath(String path, {String? system, String? tag}) {
+  return Uri(scheme: actorScheme, host: system, path: path, fragment: tag);
 }
 
 /// Creates an [Uri] for an actor path in the local actor system.
@@ -43,12 +43,12 @@ extension UriExtension on Uri {
 
   /// Creates a copy of this path with the possibility to
   /// adapt the system, path and fragment.
-  Uri copy({String? system, String? path, String? fragment}) {
+  Uri copyWith({String? system, String? path, String? tag}) {
     return Uri(
       scheme: actorScheme,
       host: system ?? host,
       path: path ?? this.path,
-      fragment: fragment ?? this.fragment,
+      fragment: tag ?? fragment,
     );
   }
 }

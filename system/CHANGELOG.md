@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+
+- BREAKING CHANGE: renamed `UriExtension.copy()` to `UriExtension.copy()` and renamed parameter `fragment` to `tag`.
+- Added named parameter `tag` to `actorPath()`.
+
 ## 0.5.1
 
 - Added helper to copy an Uri.
