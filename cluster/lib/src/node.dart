@@ -322,7 +322,8 @@ class LocalNode extends Node {
         final result = <ActorRef>[];
         for (final workerAdapter in _workerAdapters.values) {
           _log.fine('lookupActors | lookup on worker ${workerAdapter.workerId}');
-          result.addAll(await workerAdapter.protocol.lookupActors(path));
+          result.addAll(await workerAdapter.protocol
+              .lookupActors(path.copyWith(system: systemName(nodeId, workerAdapter.workerId))));
         }
         _log.info('lookupActors > $result');
         return result;
