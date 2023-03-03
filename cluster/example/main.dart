@@ -21,11 +21,13 @@ class StringSerDes implements SerDes {
 }
 
 void log(LogRecord record) {
-  print('${record.loggerName} ${record.level} ${record.message}');
-  if (record.loggerName.startsWith('actor://')) {}
+  if (record.loggerName.startsWith('actor://')) {
+    print('${record.loggerName} ${record.level} ${record.message}');
+  }
 }
 
 void main(List<String> args) async {
+  Logger.root.level = Level.ALL;
   Logger.root.onRecord.listen(log);
 
   final clusterNode = ActorCluster(
@@ -65,12 +67,26 @@ void main(List<String> args) async {
           log.info('sender: ${context.sender?.path}');
         };
       });
+      addActorFactory(patternMatcher('/foo'), (path) {
+        return (ActorContext context, Object? msg) {
+          final log = Logger(context.current.path.toString());
+          log.info('message: $msg');
+        };
+      });
+    },
+    initNode: (CreateActor createActor, List<String> tags) async {
+      final actor = await createActor(actorPath('/foo'), 1000);
+      await actor.send('test message');
     },
     initCluster: (context) async {
+      // await context.createActor(actorPath('/foo', tag: 'foobar'), sendInit: true);
+
       final actorRef1 = await context.createActor(Uri.parse('//node1/actor/1'));
       final actorRef2 = await context.createActor(Uri.parse('//node2/actor/2'));
       await context.createActor(Uri.parse('//node1/actor/3'));
       await actorRef1.send('hello cluster actor!', correlationId: '101', replyTo: actorRef2);
+
+      print(await context.lookupActors(actorPath('/foo')));
     },
   );
 }

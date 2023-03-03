@@ -4,7 +4,6 @@ import 'package:actor_system/src/system/exceptions.dart';
 import 'package:actor_system/src/system/messages.dart';
 import 'package:actor_system/src/system/ref.dart';
 import 'package:logging/logging.dart';
-import 'package:uuid/uuid.dart';
 
 /// Defines the handling of an actor path if the host part is missing.
 enum MissingHostHandling {
@@ -76,10 +75,14 @@ abstract class BaseContext {
     _log.info('createActor < path=$path, factory=${factory != null}, mailboxSize=$mailboxSize, sendInit=$sendInit');
 
     if (!path.hasAbsolutePath) {
-      throw ArgumentError.value(path, 'path', 'must be an absolute uri!');
+      throw ArgumentError.value(path, 'path', 'must be absolute');
     }
+    if (path.pathSegments.last.isEmpty) {
+      throw ArgumentError.value(path, 'path', 'must not end with a slash');
+    }
+
     if (mailboxSize != null && mailboxSize <= 0) {
-      throw ArgumentError.value(mailboxSize, 'mailboxSize', 'must be greater than zero!');
+      throw ArgumentError.value(mailboxSize, 'mailboxSize', 'must be greater than zero');
     }
 
     final defaultMailboxSize = 1000;
@@ -101,15 +104,12 @@ abstract class BaseContext {
       }
       throw StateError('No external actor create function registered!');
     }
-    _log.fine('createActor | path is a local path');
 
-    if (path.pathSegments.last.isNotEmpty) {
-      // path does not end with a slash (/). is the path already in use?
-      final existing = _actorRefs[path];
-      if (existing != null) {
-        _log.fine('createActor | found existing actor');
-        throw ArgumentError.value(path.path, 'path', 'path already in use!');
-      }
+    _log.fine('createActor | path is a local path');
+    final existing = _actorRefs[path.path];
+    if (existing != null) {
+      _log.fine('createActor | found existing actor');
+      throw ArgumentError.value(path.path, 'path', 'path already in use');
     }
 
     // search for registered factory if no factory is provided
@@ -152,6 +152,14 @@ abstract class BaseContext {
   Future<ActorRef?> lookupActor(Uri path) async {
     path = path.validActorPath();
     _log.info('lookupActor < path=$path');
+
+    if (!path.hasAbsolutePath) {
+      throw ArgumentError.value(path, 'path', 'must be absolute');
+    }
+    if (path.pathSegments.last.isEmpty) {
+      throw ArgumentError.value(path, 'path', 'must not end with a slash');
+    }
+
     if (_isLocalPath(path)) {
       _log.info('lookupActor | path is a local path');
       final result = _actorRefs[path.path];
@@ -166,12 +174,17 @@ abstract class BaseContext {
   Future<List<ActorRef>> lookupActors(Uri path) async {
     path = path.validActorPath();
     _log.info('lookupActors < path=$path');
+
+    if (!path.hasAbsolutePath) {
+      throw ArgumentError.value(path, 'path', 'must be absolute');
+    }
+
     final result = <ActorRef>[];
     if (_isLocalPath(path)) {
       _log.info('lookupActors | path is a local path');
-      final p = path.path.endsWith('/') ? path.path : '${path.path}/';
+
       for (final actorRef in _actorRefs.entries) {
-        if (actorRef.key.startsWith(p)) {
+        if (actorRef.key.startsWith(path.path)) {
           result.add(actorRef.value);
         }
       }
@@ -207,15 +220,7 @@ abstract class BaseContext {
   }
 
   Uri _finalActorPath(Uri path) {
-    if (path.pathSegments.last.isNotEmpty) {
-      return actorPath(path.path, system: path.host.isNotEmpty ? path.host : _name);
-    } else {
-      var result = actorPath(path.resolve(Uuid().v4()).path, system: _name);
-      while (_actorRefs.keys.contains(result.path)) {
-        result = path.resolve(Uuid().v4());
-      }
-      return result;
-    }
+    return actorPath(path.path, system: path.host.isNotEmpty ? path.host : _name);
   }
 }
 

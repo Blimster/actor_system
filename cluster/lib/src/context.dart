@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:actor_cluster/src/base.dart';
 import 'package:actor_cluster/src/node.dart';
 import 'package:actor_system/actor_system.dart';
 
@@ -17,12 +18,13 @@ class ClusterContext implements BaseContext {
     Uri path, {
     ActorFactory? factory,
     int? mailboxSize,
-    bool? useExistingActor,
     bool sendInit = false,
   }) async {
-    assert(factory == null, 'factory is always ignored in cluster mode');
+    if (factory != null) {
+      throw ArgumentError.value(factory, 'factory', 'must be null in cluster mode');
+    }
 
-    final result = await _localNode.createActor(path, mailboxSize, useExistingActor);
+    final result = await _localNode.createActor(path, mailboxSize);
     if (sendInit) {
       await result.send(initMsg);
     }
@@ -69,4 +71,18 @@ Node findNode(List<Node> nodes, Uri path) {
   }
 
   return node;
+}
+
+Future<ActorRef> Function(Uri path, int? mailboxSize) createCreateActor(LocalNode node) {
+  Future<ActorRef> createActor(Uri path, int? mailboxSize) async {
+    final nodeId = getNodeId(path.host);
+    if (nodeId == localSystem || nodeId.isEmpty) {
+      path = path.copyWith(system: node.nodeId);
+    } else if (nodeId != node.nodeId) {
+      throw ArgumentError.value(nodeId, 'path', 'path must reference a local node');
+    }
+    return node.createActor(path, mailboxSize);
+  }
+
+  return createActor;
 }

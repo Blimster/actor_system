@@ -18,24 +18,20 @@ import 'package:stream_channel/stream_channel.dart';
 abstract class Node {
   final String nodeId;
   final String uuid;
+  final List<String> tags;
+  final bool isSeedNode;
+  bool _isClusterInitialized;
 
-  Node(this.nodeId, this.uuid);
+  Node(this.nodeId, this.uuid, this.tags, this.isSeedNode, bool isClusterInitialized)
+      : _isClusterInitialized = isClusterInitialized;
 
-  bool validateWorkerId(int workerId) {
-    return workerId <= workers;
-  }
+  bool validateWorkerId(int workerId) => workerId <= workers;
 
   bool get isLocal;
 
   int get workers;
 
-  void publishClusterInitialized(String nodeId);
-
-  Future<ActorRef> createActor(
-    Uri path,
-    int? mailboxSize,
-    bool? useExistingActor,
-  );
+  Future<ActorRef> createActor(Uri path, int? mailboxSize);
 
   Future<ActorRef?> lookupActor(Uri path);
 
@@ -48,7 +44,8 @@ class LocalNode extends Node {
   final Map<int, _WorkerAdapter> _workerAdapters = {};
   final Map<String, RemoteNode> _remoteNodes = {};
 
-  LocalNode(this._serDes, super.nodeId, super.uuid) : _log = Logger('actor_system.cluster.LocalNode:$nodeId');
+  LocalNode(super.nodeId, super.uuid, super.tags, super.isSeedNode, super.isClusterInitialized, this._serDes)
+      : _log = Logger('actor_system.cluster.LocalNode:$nodeId');
 
   @override
   bool get isLocal => true;
@@ -66,15 +63,17 @@ class LocalNode extends Node {
     StreamReader reader,
     Sink<List<int>> writer,
     Duration timeout,
+    bool isSeedNode,
     bool clusterInitialized,
-    void Function(String nodeId) handleClusterInitialized,
   ) {
     _log.info('addRemoteNode < nodeId=$nodeId, uuid=$uuid, workers=$workers, timeout=$timeout');
     _remoteNodes[nodeId] = RemoteNode(
       nodeId,
       uuid,
-      workers,
       tags,
+      isSeedNode,
+      clusterInitialized,
+      workers,
       ClusterProtocol(
         'remote@$nodeId',
         MessageChannel(reader, writer, _serDes),
@@ -84,9 +83,8 @@ class LocalNode extends Node {
         _handleLookupActor,
         _handleLookupActors,
         _handleSendMessage,
-        handleClusterInitialized,
+        (_) => _isClusterInitialized = true,
       ),
-      clusterInitialized,
       host,
       port,
     );
@@ -117,10 +115,6 @@ class LocalNode extends Node {
     return result;
   }
 
-  Map<String, bool> clusterInitializationState() {
-    return _remoteNodes.map((k, v) => MapEntry(k, v.clusterInitialized));
-  }
-
   void addWorker(int workerId, Isolate isolate, StreamChannel<ProtocolMessage> channel, Duration timeout) {
     _log.info('addWorker < workderId=$workerId, timeout=$timeout');
     assert(!_workerAdapters.containsKey(workerId), 'worker with id $workerId is already added');
@@ -143,23 +137,51 @@ class LocalNode extends Node {
     _log.info('addWorker >');
   }
 
-  @override
-  void publishClusterInitialized(String nodeId) {
+  bool isLeader() {
+    if (!isSeedNode) {
+      return false;
+    }
+    final remoteUuids = _remoteNodes.values.where((e) => e.isSeedNode).map((e) => e.uuid).toList()..sort();
+    if (remoteUuids.isEmpty) {
+      return true;
+    }
+    final smallestRemoteUuid = remoteUuids.first;
+    return uuid.compareTo(smallestRemoteUuid) < 0;
+  }
+
+  void publishClusterInitialized() {
+    _isClusterInitialized = true;
     for (var remoteNode in _remoteNodes.values) {
       remoteNode.publishClusterInitialized(nodeId);
     }
   }
 
-  @override
-  Future<ActorRef> createActor(Uri path, int? mailboxSize, bool? useExistingActor) async {
-    _log.info('createActor < path=$path, mailboxSize=$mailboxSize, useExistingActor=$useExistingActor');
+  bool isClusterInitialized() {
+    if (_isClusterInitialized) {
+      return true;
+    }
+    for (final remoteNode in _remoteNodes.values) {
+      if (remoteNode.isClusterInitialized) {
+        return true;
+      }
+    }
+    return false;
+  }
 
-    final nodeIdFromPath = _getNodeId(path.host);
-    final workerIdFromPath = _getWorkerId(path.host);
-    final selectedNodeId = nodeIdFromPath.isNotEmpty ? nodeIdFromPath : _selectNodeId();
+  @override
+  Future<ActorRef> createActor(Uri path, int? mailboxSize) async {
+    _log.info('createActor < path=$path, mailboxSize=$mailboxSize');
+
+    final nodeIdFromPath = getNodeId(path.host);
+    final workerIdFromPath = getWorkerId(path.host);
+    final selectedNodeId = nodeIdFromPath.isNotEmpty ? nodeIdFromPath : _selectNodeId(path.fragment);
 
     _log.fine(
         'createActor | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath, selectedNode=$selectedNodeId');
+
+    if (selectedNodeId == null) {
+      throw Exception('no node found for path $path');
+    }
 
     if (selectedNodeId != nodeId) {
       _log.fine('createActor | remote node selected or referenced by path');
@@ -196,8 +218,8 @@ class LocalNode extends Node {
   Future<ActorRef?> lookupActor(Uri path) async {
     _log.info('lookupActor < path=$path');
 
-    final nodeIdFromPath = _getNodeId(path.host);
-    final workerIdFromPath = _getWorkerId(path.host);
+    final nodeIdFromPath = getNodeId(path.host);
+    final workerIdFromPath = getWorkerId(path.host);
     _log.fine('lookupActor | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath');
 
     if (nodeIdFromPath.isEmpty) {
@@ -257,8 +279,8 @@ class LocalNode extends Node {
   Future<List<ActorRef>> lookupActors(Uri path) async {
     _log.info('lookupActors < path=$path');
 
-    final nodeIdFromPath = _getNodeId(path.host);
-    final workerIdFromPath = _getWorkerId(path.host);
+    final nodeIdFromPath = getNodeId(path.host);
+    final workerIdFromPath = getWorkerId(path.host);
     _log.fine('lookupActors | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath');
 
     if (nodeIdFromPath.isEmpty) {
@@ -318,12 +340,16 @@ class LocalNode extends Node {
   Future<CreateActorResponse> _handleCreateActor(Uri path, int? mailboxSize) async {
     _log.info('handleCreateActor < path=$path, mailboxSize=$mailboxSize');
 
-    final nodeIdFromPath = _getNodeId(path.host);
-    final workerIdFromPath = _getWorkerId(path.host);
+    final nodeIdFromPath = getNodeId(path.host);
+    final workerIdFromPath = getWorkerId(path.host);
     final selectedNodeId = nodeIdFromPath.isNotEmpty ? nodeIdFromPath : _selectNodeId();
 
     _log.fine(
         'handleCreateActor | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath, selectedNode=$selectedNodeId');
+
+    if (selectedNodeId == null) {
+      return CreateActorResponse(false, 'no node found for path $path');
+    }
 
     if (selectedNodeId != nodeId) {
       _log.fine('handleCreateActor | remote node selected or referenced by path');
@@ -378,8 +404,8 @@ class LocalNode extends Node {
   Future<LookupActorResponse> _handleLookupActor(Uri path) async {
     _log.info('handleLookupActor < path=$path');
 
-    final nodeIdFromPath = _getNodeId(path.host);
-    final workerIdFromPath = _getWorkerId(path.host);
+    final nodeIdFromPath = getNodeId(path.host);
+    final workerIdFromPath = getWorkerId(path.host);
     _log.fine('handleLookupActor | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath');
 
     if (nodeIdFromPath.isEmpty) {
@@ -454,8 +480,8 @@ class LocalNode extends Node {
   Future<LookupActorsResponse> _handleLookupActors(Uri path) async {
     _log.info('handleLookupActors < path=$path');
 
-    final nodeIdFromPath = _getNodeId(path.host);
-    final workerIdFromPath = _getWorkerId(path.host);
+    final nodeIdFromPath = getNodeId(path.host);
+    final workerIdFromPath = getWorkerId(path.host);
     _log.fine('handleLookupActor | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath');
 
     if (nodeIdFromPath.isEmpty) {
@@ -527,8 +553,8 @@ class LocalNode extends Node {
     Uri? replyTo,
     String? correlationId,
   ) async {
-    final nodeIdFromPath = _getNodeId(path.host);
-    final workerIdFromPath = _getWorkerId(path.host);
+    final nodeIdFromPath = getNodeId(path.host);
+    final workerIdFromPath = getWorkerId(path.host);
 
     if (nodeIdFromPath.isEmpty) {
       return SendMessageResponse(SendMessageResult.messageNotDelivered, 'invalid actor path: no nodeId');
@@ -565,31 +591,39 @@ class LocalNode extends Node {
     }
   }
 
-  String _selectNodeId() {
+  String? _selectNodeId([String? tag]) {
+    _log.fine('selectNodeId < tag=$tag');
     final nodeIds = [
-      nodeId,
-      ..._remoteNodes.keys,
+      if (tag == null || tag.isEmpty || tags.contains(tag)) nodeId,
+      ..._remoteNodes.entries //
+          .where((e) => tag == null || tag.isEmpty || e.value.tags.contains(tag))
+          .map((e) => e.key),
     ];
-    return nodeIds[Random().nextInt(nodeIds.length)];
+    if (nodeIds.isEmpty) {
+      _log.fine('selectNodeId > null');
+      return null;
+    }
+    final result = nodeIds[Random().nextInt(nodeIds.length)];
+    _log.fine('selectNodeId > $result');
+    return result;
   }
 }
 
 class RemoteNode extends Node {
   @override
   final int workers;
-  final List<String> tags;
   final ClusterProtocol protocol;
-  final bool clusterInitialized;
   final String host;
   final int port;
 
   RemoteNode(
     super.nodeId,
     super.uuid,
+    super.tags,
+    super.isSeedNode,
+    super.clusterInitialized,
     this.workers,
-    this.tags,
     this.protocol,
-    this.clusterInitialized,
     this.host,
     this.port,
   );
@@ -597,13 +631,14 @@ class RemoteNode extends Node {
   @override
   bool get isLocal => false;
 
-  @override
+  bool get isClusterInitialized => _isClusterInitialized;
+
   void publishClusterInitialized(String nodeId) {
     protocol.publishClusterInitialized(nodeId);
   }
 
   @override
-  Future<ActorRef> createActor(Uri path, int? mailboxSize, bool? useExistingActor) {
+  Future<ActorRef> createActor(Uri path, int? mailboxSize) {
     return protocol.createActor(path, mailboxSize);
   }
 
@@ -620,22 +655,6 @@ class RemoteNode extends Node {
   Future<void> close() {
     return protocol.close();
   }
-}
-
-String _getNodeId(String host) {
-  int separatorIndex = host.lastIndexOf('_');
-  if (separatorIndex == -1) {
-    return host;
-  }
-  return host.substring(0, separatorIndex);
-}
-
-int _getWorkerId(String host) {
-  int separatorIndex = host.lastIndexOf('_');
-  if (separatorIndex == -1) {
-    return 0;
-  }
-  return int.parse(host.substring(separatorIndex + 1));
 }
 
 class _WorkerAdapter {

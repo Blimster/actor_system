@@ -47,11 +47,14 @@ void main() {
       await system.createActor(Uri.parse('/foo/1'), factory: (path) => (ctx, msg) => null);
       await system.createActor(Uri.parse('/foo/2'), factory: (path) => (ctx, msg) => null);
       await system.createActor(Uri.parse('/bar/1'), factory: (path) => (ctx, msg) => null);
-      final actors = await system.lookupActors(Uri.parse('/foo'));
+      final actors = await system.lookupActors(Uri.parse('/foo/'));
       expect(actors, hasLength(2));
       expect(
         actors.map((e) => e.path),
-        containsAll([Uri.parse('actor://local/foo/1'), Uri.parse('actor://local/foo/2')]),
+        containsAll([
+          Uri.parse('actor://local/foo/1'),
+          Uri.parse('actor://local/foo/2'),
+        ]),
       );
     });
   });
@@ -85,8 +88,8 @@ void main() {
       system.externalLookupActors = (path) async {
         return [TestRef(path)];
       };
-      final actorRef = await system.lookupActors(Uri(host: 'foo', path: '/actor'));
-      expect(actorRef.map((e) => e.path), containsAll([Uri(scheme: 'actor', host: 'foo', path: '/actor')]));
+      final actorRefs = await system.lookupActors(Uri(host: 'foo', path: '/actor'));
+      expect(actorRefs.map((e) => e.path), containsAll([Uri(scheme: 'actor', host: 'foo', path: '/actor')]));
     });
   });
 
