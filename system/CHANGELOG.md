@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+- BREAKING CHANGE: parameter `path` of `lookupActor()` and `lookupActors()` must be absolute.
+- BREAKING CHANGE: parameter `path` of `createActor()` and `lookupActor()` must not end with a slash.
+- Bugfix: it was possible to create more than one actor on the same path.
+- Improved handling of an empty fragment in `validActorPath()` and `copyWith()` of `UriExtension`.
+
 ## 0.6.0
 
 - BREAKING CHANGE: renamed `UriExtension.copy()` to `UriExtension.copy()` and renamed parameter `fragment` to `tag`.
