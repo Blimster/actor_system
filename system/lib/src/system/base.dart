@@ -53,7 +53,7 @@ extension UriExtension on Uri {
       scheme: actorScheme,
       host: system ?? host,
       path: path ?? this.path,
-      fragment: tag ?? fragment,
+      fragment: tag ?? (fragment.isEmpty ? null : fragment),
     );
   }
 }
