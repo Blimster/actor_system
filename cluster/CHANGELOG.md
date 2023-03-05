@@ -2,9 +2,10 @@
 
 ## 0.2.0
 
-- BREAKING CHANGE: based on version 0.6.0 of package `actor_system`.
+- BREAKING CHANGE: based on version 0.7.0 of package `actor_system`.
 - BREAKING CHANGE: Splitted configuration into separate parts for cluster and node.
 - Cluster nodes can be configured with tags and for each tag the number of required nodes can be configured. If configured, the cluster will only start, if all required tags are available.
+- The `path` parameter of `createActor()` can now contain a fragment. The fragment is used as a node tag. The actor will be created on a node tagged with the given tag. 
 
 ## 0.1.0
 

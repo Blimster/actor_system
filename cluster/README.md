@@ -10,12 +10,11 @@ Connects multiple actor systems to a cluster.
 
 - The actor systems can run in different isolate and/or different processes.
 - Use a custom serializer/deserializer to transfer message over the network.
-- Define a bootstrap message to create the initial actors in the cluster.
-- Auto-reconnect after a node disconnects.
+- Auto-reconnect after a seed node disconnects.
 - The cluster can decide on which node an actor is created.
 
 ## Usage
 
 
-## Examples
+## Example
 
