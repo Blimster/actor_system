@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- It is now possible to get metrics of an actor system by using `ActorSystem.metrics`.
+- It is now possbile to get a list of all available actor paths by using `ActorSystem.actorPaths`.
+
 ## 0.7.0
 
 - BREAKING CHANGE: parameter `path` of `lookupActor()` and `lookupActors()` must be absolute.

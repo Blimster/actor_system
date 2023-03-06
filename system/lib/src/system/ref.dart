@@ -24,6 +24,8 @@ class ActorRef {
   final Queue<ActorMessageEnvelope> _mailbox = Queue();
   final ActorFactory _factory;
   final ActorContext _context;
+  final void Function(Uri path, int processingTimeMs, int mailBoxLength) _onMessageProcessed;
+  final void Function(String path) _onActorStopped;
   Actor _actor;
   bool _isProcessing = false;
   bool _stopped = false;
@@ -34,6 +36,8 @@ class ActorRef {
     this._actor,
     this._factory,
     this._context,
+    this._onMessageProcessed,
+    this._onActorStopped,
   ) : _log = Logger('actor_system.system.ActorRef:${path.toString()}');
 
   /// Sends a message to the actor referenced by this
@@ -83,10 +87,15 @@ class ActorRef {
             _log.fine('handleMessage | received shutdown message.');
             _stopped = true;
             _mailbox.clear();
+            _onActorStopped(path.path);
           }
           prepareContext(_context, this, envelope.sender, envelope.replyTo, envelope.correlationId);
           _log.fine('handleMessage | calling actor with message of type ${envelope.message?.runtimeType}');
+          final sw = Stopwatch();
+          sw.start();
           await _actor(_context, envelope.message);
+          sw.stop();
+          _onMessageProcessed(path, sw.elapsedMilliseconds, _mailbox.length);
           _log.fine('handleMessage | back from actor call');
         } catch (error) {
           _log.warning('handleMessage | unhandled error while calling actor: $error');
@@ -122,6 +131,8 @@ ActorRef createActorRef(
   Actor actor,
   ActorFactory factory,
   ActorContext context,
+  void Function(Uri path, int processingTimeMs, int mailBoxLength) onMessageProcessed,
+  void Function(String path) onActorStopped,
 ) {
-  return ActorRef._(path, maxMailBoxSize, actor, factory, context);
+  return ActorRef._(path, maxMailBoxSize, actor, factory, context, onMessageProcessed, onActorStopped);
 }

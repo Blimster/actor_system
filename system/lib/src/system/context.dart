@@ -2,6 +2,7 @@ import 'package:actor_system/src/system/actor.dart';
 import 'package:actor_system/src/system/base.dart';
 import 'package:actor_system/src/system/exceptions.dart';
 import 'package:actor_system/src/system/messages.dart';
+import 'package:actor_system/src/system/metrics.dart';
 import 'package:actor_system/src/system/ref.dart';
 import 'package:logging/logging.dart';
 
@@ -37,6 +38,7 @@ abstract class BaseContext {
   final NullableRef<CreateActor> _externalCreateActor;
   final NullableRef<LookupActor> _externalLookupActor;
   final NullableRef<LookupActors> _externalLookupActors;
+  final MetricsImpl _metrics;
   ActorRef? _current;
   ActorRef? _sender;
   ActorRef? _replyTo;
@@ -50,6 +52,7 @@ abstract class BaseContext {
     this._externalCreateActor,
     this._externalLookupActor,
     this._externalLookupActors,
+    this._metrics,
   ) : _log = Logger('actor_system.system.BaseContext:$_name');
 
   /// Creates an actor at the given path.
@@ -122,19 +125,23 @@ abstract class BaseContext {
     final actorPath = _finalActorPath(path);
     _log.fine('createActor | final path is $actorPath');
     final actorRef = createActorRef(
-        actorPath,
-        mailboxSize ?? defaultMailboxSize,
-        await actorFactory(actorPath),
-        actorFactory,
-        ActorContext._(
-          _name,
-          _missingHostHandling,
-          _actorRefs,
-          _factories,
-          _externalCreateActor,
-          _externalLookupActor,
-          _externalLookupActors,
-        ));
+      actorPath,
+      mailboxSize ?? defaultMailboxSize,
+      await actorFactory(actorPath),
+      actorFactory,
+      ActorContext._(
+        _name,
+        _missingHostHandling,
+        _actorRefs,
+        _factories,
+        _externalCreateActor,
+        _externalLookupActor,
+        _externalLookupActors,
+        _metrics,
+      ),
+      _onMessageProcessed,
+      _onActorStopped,
+    );
     if (_isLocalPath(path)) {
       _actorRefs[actorPath.path] = actorRef;
     }
@@ -222,6 +229,14 @@ abstract class BaseContext {
   Uri _finalActorPath(Uri path) {
     return actorPath(path.path, system: path.host.isNotEmpty ? path.host : _name);
   }
+
+  void _onMessageProcessed(Uri path, int processingTimeMs, int mailBoxLength) {
+    _metrics.update(path, processingTimeMs, mailBoxLength);
+  }
+
+  void _onActorStopped(String path) {
+    _actorRefs.remove(path);
+  }
 }
 
 /// A context for an actor. The context is provided to the actor for
@@ -234,6 +249,7 @@ class ActorContext extends BaseContext {
     NullableRef<CreateActor> externalCreate,
     NullableRef<LookupActor> externalLookup,
     NullableRef<LookupActors> externalLookups,
+    MetricsImpl metrics,
   ) : super._(
           name,
           missingHostHandling,
@@ -242,6 +258,7 @@ class ActorContext extends BaseContext {
           externalCreate,
           externalLookup,
           externalLookups,
+          metrics,
         );
 
   /// The current reference.
@@ -288,7 +305,14 @@ class ActorSystem extends BaseContext {
           NullableRef(),
           NullableRef(),
           NullableRef(),
+          MetricsImpl(),
         );
+
+  /// The metrics for this actor system.
+  ActorSystemMetrics get metrics => _metrics;
+
+  /// The paths of all actors in this system.
+  List<Uri> get actorPaths => _actorRefs.values.map((e) => e.path).toList()..sort((a, b) => a.path.compareTo(b.path));
 
   /// Adds a global actor factory for the actor system. A global factory is used
   /// to create a new actor if the caller of [BaseContext.createActor] provides no

@@ -91,6 +91,19 @@ void main() {
       final actorRefs = await system.lookupActors(Uri(host: 'foo', path: '/actor'));
       expect(actorRefs.map((e) => e.path), containsAll([Uri(scheme: 'actor', host: 'foo', path: '/actor')]));
     });
+
+    test('actors paths are available', () async {
+      final Completer<void> completer = Completer();
+      await system.createActor(Uri.parse('/foo'), factory: (path) => (ctx, msg) => null);
+      final actor = await system.createActor(Uri.parse('/bar'), factory: (path) => (ctx, msg) => completer.complete());
+
+      expect(system.actorPaths, equals([actorPath('/bar', system: 'local'), actorPath('/foo', system: 'local')]));
+
+      await actor.shutdown();
+      await completer.future;
+
+      expect(system.actorPaths, equals([actorPath('/foo', system: 'local')]));
+    });
   });
 
   group('actor context', () {
