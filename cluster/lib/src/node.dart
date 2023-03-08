@@ -43,15 +43,23 @@ class LocalNode extends Node {
   final SerDes _serDes;
   final Map<int, _WorkerAdapter> _workerAdapters = {};
   final Map<String, RemoteNode> _remoteNodes = {};
+  late final Timer _nodeInfoTimer;
 
   LocalNode(super.nodeId, super.uuid, super.tags, super.isSeedNode, super.isClusterInitialized, this._serDes)
-      : _log = Logger('actor_system.cluster.LocalNode:$nodeId');
+      : _log = Logger('actor_system.cluster.LocalNode:$nodeId') {
+    _nodeInfoTimer = Timer.periodic(Duration(seconds: 5), _publishNodeInfo);
+  }
 
   @override
   bool get isLocal => true;
 
   @override
   int get workers => _workerAdapters.length;
+
+  void shutdown() {
+    _nodeInfoTimer.cancel();
+    // TODO close connections and stop workers
+  }
 
   void addRemoteNode(
     String nodeId,
@@ -74,16 +82,17 @@ class LocalNode extends Node {
       isSeedNode,
       clusterInitialized,
       workers,
-      ClusterProtocol(
+      NodeToNodeProtocol(
         'remote@$nodeId',
         MessageChannel(reader, writer, _serDes),
         _serDes,
         timeout,
+        _handleClusterInitialized,
+        _handleNodeInfo,
         _handleCreateActor,
         _handleLookupActor,
         _handleLookupActors,
         _handleSendMessage,
-        (_) => _isClusterInitialized = true,
       ),
       host,
       port,
@@ -123,11 +132,12 @@ class LocalNode extends Node {
       nodeId,
       workerId,
       isolate,
-      ActorProtocol(
+      NodeToWorkerProtocol(
         'worker@$workerId',
         channel,
         _serDes,
         timeout,
+        _handleWorkerInfo,
         _handleCreateActor,
         _handleLookupActor,
         _handleLookupActors,
@@ -592,6 +602,44 @@ class LocalNode extends Node {
     }
   }
 
+  void _handleClusterInitialized(String nodeId) {
+    _isClusterInitialized = true;
+  }
+
+  void _handleNodeInfo(
+    String nodeId,
+    double load,
+    List<String> actorsAdded,
+    List<String> actorsRemoved,
+  ) {
+    final remoteNode = _remoteNodes[nodeId];
+    if (remoteNode != null) {
+      remoteNode.load = load;
+    }
+  }
+
+  void _handleWorkerInfo(
+    int workerId,
+    double load,
+    List<String> actorsAdded,
+    List<String> actorsRemoved,
+  ) {
+    final adapter = _workerAdapters[workerId];
+    if (adapter != null) {
+      adapter.load = load;
+    }
+  }
+
+  void _publishNodeInfo(Timer timer) {
+    var load = 0.0;
+    for (final workerAdapter in _workerAdapters.values) {
+      load += workerAdapter.load;
+    }
+    for (final remoteNode in _remoteNodes.values) {
+      remoteNode.protocol.publishNodeInfo(nodeId, load, [], []);
+    }
+  }
+
   String? _selectNodeId([String? tag]) {
     _log.fine('selectNodeId < tag=$tag');
     final nodeIds = [
@@ -604,18 +652,52 @@ class LocalNode extends Node {
       _log.fine('selectNodeId > null');
       return null;
     }
-    final result = nodeIds[Random().nextInt(nodeIds.length)];
-    _log.fine('selectNodeId > $result');
-    return result;
+
+    final loads = <String, double>{};
+    if (nodeIds.contains(nodeId)) {
+      var load = 0.0;
+      for (final workerAdapter in _workerAdapters.values) {
+        load += workerAdapter.load;
+      }
+      loads[nodeId] = load;
+    }
+    for (final remoteNode in _remoteNodes.entries) {
+      if (nodeIds.contains(remoteNode.key)) {
+        loads[remoteNode.key] = remoteNode.value.load;
+      }
+    }
+    _log.fine('selectNodeId | nodeIds with loads: $loads');
+
+    final highestLoad = loads.entries
+        .fold(0.0, (previousValue, element) => element.value > previousValue ? element.value : previousValue);
+    if (highestLoad == 0.0) {
+      final result = nodeIds[Random().nextInt(nodeIds.length)];
+      _log.fine('selectNodeId | selected node by random');
+      _log.fine('selectNodeId > $result');
+      return result;
+    } else {
+      String? result;
+      var load = 1.0;
+      for (final loadEntry in loads.entries) {
+        if (loadEntry.value < load) {
+          load = loadEntry.value;
+          result = loadEntry.key;
+        }
+      }
+      _log.fine('selectNodeId | selected node by load');
+      _log.fine('selectNodeId > $result');
+      return result;
+    }
   }
 }
 
 class RemoteNode extends Node {
   @override
   final int workers;
-  final ClusterProtocol protocol;
+  final NodeToNodeProtocol protocol;
   final String host;
   final int port;
+  double load = 0.0;
 
   RemoteNode(
     super.nodeId,
@@ -662,7 +744,8 @@ class _WorkerAdapter {
   final String nodeId;
   final int workerId;
   final Isolate isolate;
-  final ActorProtocol protocol;
+  final NodeToWorkerProtocol protocol;
+  double load = 0.0;
 
   _WorkerAdapter(this.nodeId, this.workerId, this.isolate, this.protocol);
 

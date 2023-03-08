@@ -5,7 +5,9 @@ import 'package:actor_cluster/src/messages/cluster_initialized.dart';
 import 'package:actor_cluster/src/messages/create_actor.dart';
 import 'package:actor_cluster/src/messages/lookup_actor.dart';
 import 'package:actor_cluster/src/messages/lookup_actors.dart';
+import 'package:actor_cluster/src/messages/node_info.dart';
 import 'package:actor_cluster/src/messages/send_message.dart';
+import 'package:actor_cluster/src/messages/system_info.dart';
 import 'package:actor_cluster/src/ref_proxy.dart';
 import 'package:actor_cluster/src/ser_des.dart';
 import 'package:actor_system/actor_system.dart';
@@ -14,6 +16,8 @@ import 'package:stream_channel/stream_channel.dart';
 import 'package:uuid/uuid.dart';
 
 const clusterInitializedMessageName = 'ci';
+const workerInfoMessageName = 'wi';
+const nodeInfoMessageName = 'ni';
 const createActorMessageName = 'ca';
 const lookupActorMessageName = 'la';
 const lookupActorsMessageName = 'las';
@@ -106,23 +110,30 @@ abstract class BaseProtocol {
   }
 }
 
-class ActorProtocol extends BaseProtocol {
-  final Future<CreateActorResponse> Function(Uri path, int? mailboxSize) _handleCreateActor;
-  final Future<LookupActorResponse> Function(Uri path) _handleLookupActor;
-  final Future<LookupActorsResponse> Function(Uri path) _handleLookupActors;
-  final Future<SendMessageResponse> Function(
+mixin ActorProtocolMixin on BaseProtocol {
+  late final Future<CreateActorResponse> Function(Uri path, int? mailboxSize) _handleCreateActor;
+  late final Future<LookupActorResponse> Function(Uri path) _handleLookupActor;
+  late final Future<LookupActorsResponse> Function(Uri path) _handleLookupActors;
+  late final Future<SendMessageResponse> Function(
       Uri path, Object? message, Uri? sender, Uri? replyTo, String? correlationId) _handleSendMessage;
 
-  ActorProtocol(
-    super.id,
-    super.channel,
-    super.serDes,
-    super.timeout,
-    this._handleCreateActor,
-    this._handleLookupActor,
-    this._handleLookupActors,
-    this._handleSendMessage,
+  void _initActorProtocolHandlers(
+    Future<CreateActorResponse> Function(Uri path, int? mailboxSize) handleCreateActor,
+    Future<LookupActorResponse> Function(Uri path) handleLookupActor,
+    Future<LookupActorsResponse> Function(Uri path) handleLookupActors,
+    Future<SendMessageResponse> Function(
+      Uri path,
+      Object? message,
+      Uri? sender,
+      Uri? replyTo,
+      String? correlationId,
+    )
+        handleSendMessage,
   ) {
+    _handleCreateActor = handleCreateActor;
+    _handleLookupActor = handleLookupActor;
+    _handleLookupActors = handleLookupActors;
+    _handleSendMessage = handleSendMessage;
     addMessageHandler(ProtocolMessageType.request, createActorMessageName, _handleCreateActorRequest);
     addMessageHandler(ProtocolMessageType.response, createActorMessageName, _handleCreateActorResponse);
     addMessageHandler(ProtocolMessageType.request, lookupActorMessageName, _handleLookupActorRequest);
@@ -352,21 +363,26 @@ class ActorProtocol extends BaseProtocol {
   }
 }
 
-class ClusterProtocol extends ActorProtocol {
+class NodeToNodeProtocol extends BaseProtocol with ActorProtocolMixin {
   final void Function(String nodeId) _handleClusterInitialized;
+  final void Function(String nodeId, double load, List<String> actorsAdded, List<String> actorsRemoved) _handleNodeInfo;
 
-  ClusterProtocol(
+  NodeToNodeProtocol(
     super.id,
     super.channel,
     super.serDes,
     super.timeout,
-    super.handleCreateActor,
-    super.handleLookupActor,
-    super.handleLookupActors,
-    super.handleSendMessage,
     this._handleClusterInitialized,
+    this._handleNodeInfo,
+    Future<CreateActorResponse> Function(Uri path, int? mailboxSize) handleCreateActor,
+    Future<LookupActorResponse> Function(Uri path) handleLookupActor,
+    Future<LookupActorsResponse> Function(Uri path) handleLookupActors,
+    Future<SendMessageResponse> Function(Uri path, Object? message, Uri? sender, Uri? replyTo, String? correlationId)
+        handleSendMessage,
   ) {
+    _initActorProtocolHandlers(handleCreateActor, handleLookupActor, handleLookupActors, handleSendMessage);
     addMessageHandler(ProtocolMessageType.oneWay, clusterInitializedMessageName, _handleClusterInitializedMessage);
+    addMessageHandler(ProtocolMessageType.oneWay, nodeInfoMessageName, _handleNodeInfoMessage);
   }
 
   void publishClusterInitialized(String nodeId) async {
@@ -378,10 +394,89 @@ class ClusterProtocol extends ActorProtocol {
     ));
   }
 
+  Future<void> publishNodeInfo(
+    String nodeId,
+    double load,
+    List<String> actorsAdded,
+    List<String> actorsRemoved,
+  ) async {
+    _channel.sink.add(ProtocolMessage(
+      ProtocolMessageType.oneWay,
+      nodeInfoMessageName,
+      '',
+      NodeInfo(nodeId, load, actorsAdded, actorsRemoved),
+    ));
+  }
+
   void _handleClusterInitializedMessage(ProtocolMessage message) {
     _log.fine('_handleClusterInitializedMessage < message=$message');
     final data = message.data as ClusterInitialized;
     _handleClusterInitialized(data.nodeId);
     _log.fine('_handleClusterInitializedMessage >');
+  }
+
+  void _handleNodeInfoMessage(ProtocolMessage message) {
+    _log.fine('handleNodeInfoMessage < message=$message');
+    final data = message.data as NodeInfo;
+    _handleNodeInfo(data.nodeId, data.load, data.actorsAdded, data.actorsRemoved);
+    _log.fine('handleNodeInfoMessage >');
+  }
+}
+
+class NodeToWorkerProtocol extends BaseProtocol with ActorProtocolMixin {
+  final void Function(int workerId, double load, List<String> actorsAdded, List<String> actorsRemoved)
+      _handleWorkerInfo;
+
+  NodeToWorkerProtocol(
+    super.id,
+    super.channel,
+    super.serDes,
+    super.timeout,
+    this._handleWorkerInfo,
+    Future<CreateActorResponse> Function(Uri path, int? mailboxSize) handleCreateActor,
+    Future<LookupActorResponse> Function(Uri path) handleLookupActor,
+    Future<LookupActorsResponse> Function(Uri path) handleLookupActors,
+    Future<SendMessageResponse> Function(Uri path, Object? message, Uri? sender, Uri? replyTo, String? correlationId)
+        handleSendMessage,
+  ) {
+    _initActorProtocolHandlers(handleCreateActor, handleLookupActor, handleLookupActors, handleSendMessage);
+    addMessageHandler(ProtocolMessageType.oneWay, workerInfoMessageName, _handleWorkerInfoMessage);
+  }
+
+  void _handleWorkerInfoMessage(ProtocolMessage message) {
+    _log.fine('handleWorkerInfoMessage < message=$message');
+    final data = message.data as WorkerInfo;
+    _handleWorkerInfo(data.workerId, data.load, data.actorsAdded, data.actorsRemoved);
+    _log.fine('handleWorkerInfoMessage >');
+  }
+}
+
+class WorkerToNodeProtocol extends BaseProtocol with ActorProtocolMixin {
+  WorkerToNodeProtocol(
+    super.id,
+    super.channel,
+    super.serDes,
+    super.timeout,
+    Future<CreateActorResponse> Function(Uri path, int? mailboxSize) handleCreateActor,
+    Future<LookupActorResponse> Function(Uri path) handleLookupActor,
+    Future<LookupActorsResponse> Function(Uri path) handleLookupActors,
+    Future<SendMessageResponse> Function(Uri path, Object? message, Uri? sender, Uri? replyTo, String? correlationId)
+        handleSendMessage,
+  ) {
+    _initActorProtocolHandlers(handleCreateActor, handleLookupActor, handleLookupActors, handleSendMessage);
+  }
+
+  Future<void> publishWorkerInfo(
+    int workerId,
+    double load,
+    List<String> actorsAdded,
+    List<String> actorsRemoved,
+  ) async {
+    _channel.sink.add(ProtocolMessage(
+      ProtocolMessageType.oneWay,
+      workerInfoMessageName,
+      '',
+      WorkerInfo(workerId, load, actorsAdded, actorsRemoved),
+    ));
   }
 }

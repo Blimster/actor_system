@@ -5,6 +5,7 @@ import 'package:actor_cluster/src/messages/cluster_initialized.dart';
 import 'package:actor_cluster/src/messages/create_actor.dart';
 import 'package:actor_cluster/src/messages/lookup_actor.dart';
 import 'package:actor_cluster/src/messages/lookup_actors.dart';
+import 'package:actor_cluster/src/messages/node_info.dart';
 import 'package:actor_cluster/src/messages/send_message.dart';
 import 'package:actor_cluster/src/protocol.dart';
 import 'package:actor_cluster/src/ser_des.dart';
@@ -16,6 +17,8 @@ PackableData _createMessage(ProtocolMessageType messageType, String messageName,
   switch (messageName) {
     case clusterInitializedMessageName:
       return ClusterInitialized.unpack(messageData);
+    case nodeInfoMessageName:
+      return NodeInfo.unpack(messageData);
     case createActorMessageName:
       switch (messageType) {
         case ProtocolMessageType.request:

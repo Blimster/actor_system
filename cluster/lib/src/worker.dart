@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:actor_cluster/src/base.dart';
@@ -41,7 +42,7 @@ class Worker {
   final IsolateChannel<ProtocolMessage> channel;
   final SerDes serDes;
   final AddActorFactories? addActorFactories;
-  late final ActorProtocol protocol;
+  late final WorkerToNodeProtocol protocol;
 
   Worker(
     this.nodeId,
@@ -52,7 +53,7 @@ class Worker {
     this.addActorFactories,
     Duration timeout,
   ) {
-    protocol = ActorProtocol(
+    protocol = WorkerToNodeProtocol(
       'worker',
       channel,
       serDes,
@@ -149,6 +150,11 @@ class Worker {
     actorSystem.externalLookupActor = _externalLookupActor;
     actorSystem.externalLookupActors = _externalLookupActors;
     await addActorFactories?.call(actorSystem.addActorFactory);
+
+    Timer.periodic(Duration(seconds: 5), (timer) {
+      final load = actorSystem.metrics.load;
+      protocol.publishWorkerInfo(workerId, load, [], []);
+    });
   }
 }
 
