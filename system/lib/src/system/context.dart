@@ -38,6 +38,8 @@ abstract class BaseContext {
   final NullableRef<CreateActor> _externalCreateActor;
   final NullableRef<LookupActor> _externalLookupActor;
   final NullableRef<LookupActors> _externalLookupActors;
+  final NullableRef<OnActorAdded> _onActorAdded;
+  final NullableRef<OnActorRemoved> _onActorRemoved;
   final MetricsImpl _metrics;
   ActorRef? _current;
   ActorRef? _sender;
@@ -52,6 +54,8 @@ abstract class BaseContext {
     this._externalCreateActor,
     this._externalLookupActor,
     this._externalLookupActors,
+    this._onActorAdded,
+    this._onActorRemoved,
     this._metrics,
   ) : _log = Logger('actor_system.system.BaseContext:$_name');
 
@@ -137,6 +141,8 @@ abstract class BaseContext {
         _externalCreateActor,
         _externalLookupActor,
         _externalLookupActors,
+        _onActorAdded,
+        _onActorRemoved,
         _metrics,
       ),
       _onMessageProcessed,
@@ -144,6 +150,7 @@ abstract class BaseContext {
     );
     if (_isLocalPath(path)) {
       _actorRefs[actorPath.path] = actorRef;
+      _onActorAdded.value?.call(actorRef.path);
     }
 
     if (sendInit) {
@@ -235,7 +242,10 @@ abstract class BaseContext {
   }
 
   void _onActorStopped(String path) {
-    _actorRefs.remove(path);
+    final ref = _actorRefs.remove(path);
+    if (ref != null) {
+      _onActorRemoved.value?.call(ref.path);
+    }
   }
 }
 
@@ -249,6 +259,8 @@ class ActorContext extends BaseContext {
     NullableRef<CreateActor> externalCreate,
     NullableRef<LookupActor> externalLookup,
     NullableRef<LookupActors> externalLookups,
+    NullableRef<OnActorAdded> onActorAdded,
+    NullableRef<OnActorRemoved> onActorRemoved,
     MetricsImpl metrics,
   ) : super._(
           name,
@@ -258,6 +270,8 @@ class ActorContext extends BaseContext {
           externalCreate,
           externalLookup,
           externalLookups,
+          onActorAdded,
+          onActorRemoved,
           metrics,
         );
 
@@ -305,6 +319,8 @@ class ActorSystem extends BaseContext {
           NullableRef(),
           NullableRef(),
           NullableRef(),
+          NullableRef(),
+          NullableRef(),
           MetricsImpl(),
         );
 
@@ -334,6 +350,12 @@ class ActorSystem extends BaseContext {
   /// Sets the external lookup actors function. This function is used to lookup a actors
   /// outside of the current [ActorSystem].
   set externalLookupActors(LookupActors? lookup) => _externalLookupActors.value = lookup;
+
+  /// Sets a callback function that is called when an actor is added to the system.
+  set onActorAdded(OnActorAdded? onActorAdded) => _onActorAdded.value = onActorAdded;
+
+  /// Sets a callback function that is called when an actor is removed from the system.
+  set onActorRemoved(OnActorRemoved? onActorRemoved) => _onActorRemoved.value = onActorRemoved;
 }
 
 class MatcherAndFactory {

@@ -23,3 +23,9 @@ typedef LookupActor = FutureOr<ActorRef?> Function(Uri path);
 
 /// Looks up one or more actors by the given [Uri].
 typedef LookupActors = FutureOr<List<ActorRef>> Function(Uri path);
+
+/// Called when an actor was added to the system.
+typedef OnActorAdded = void Function(Uri path);
+
+/// Called when an actor was removed from the system.
+typedef OnActorRemoved = void Function(Uri path);

@@ -104,6 +104,30 @@ void main() {
 
       expect(system.actorPaths, equals([actorPath('/foo', system: 'local')]));
     });
+
+    test('onActorAdded() and onActorRemoved() is called', () async {
+      bool addedCalled = false;
+      bool removedCalled = false;
+      final Completer<void> completer = Completer();
+      system.onActorAdded = (path) {
+        if (path == actorPath('/actor', system: 'local')) {
+          addedCalled = true;
+        }
+      };
+      system.onActorRemoved = (path) {
+        if (path == actorPath('/actor', system: 'local')) {
+          removedCalled = true;
+          completer.complete();
+        }
+      };
+
+      final actor = await system.createActor(Uri.parse('/actor'), factory: (path) => (ctx, msg) => null);
+      expect(addedCalled, isTrue);
+      expect(removedCalled, isFalse);
+      await actor.shutdown();
+      await completer.future;
+      expect(removedCalled, isTrue);
+    });
   });
 
   group('actor context', () {
