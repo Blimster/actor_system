@@ -47,7 +47,7 @@ class LocalNode extends Node {
 
   LocalNode(super.nodeId, super.uuid, super.tags, super.isSeedNode, super.isClusterInitialized, this._serDes)
       : _log = Logger('actor_system.cluster.LocalNode:$nodeId') {
-    _nodeInfoTimer = Timer.periodic(Duration(seconds: 5), _publishNodeInfo);
+    _nodeInfoTimer = Timer.periodic(Duration(seconds: 5), (_) => _publishNodeInfo());
   }
 
   @override
@@ -184,7 +184,7 @@ class LocalNode extends Node {
 
     final nodeIdFromPath = getNodeId(path.host);
     final workerIdFromPath = getWorkerId(path.host);
-    final selectedNodeId = nodeIdFromPath.isNotEmpty ? nodeIdFromPath : _selectNodeId(path.fragment);
+    final selectedNodeId = nodeIdFromPath.isNotEmpty ? nodeIdFromPath : _selectNodeId(path.path, path.fragment);
 
     _log.fine(
         'createActor | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath, selectedNode=$selectedNodeId');
@@ -204,11 +204,12 @@ class LocalNode extends Node {
         actorPath(path.path, system: systemName(selectedNodeId, workerIdFromPath)),
         mailboxSize,
       );
+      remoteNode.actorPaths.add(result.path);
       _log.info('createActor > $result');
       return result;
     } else {
       _log.fine('createActor | local node selected or referenced by path');
-      final selectedWorkerId = workerIdFromPath != 0 ? workerIdFromPath : Random().nextInt(_workerAdapters.length) + 1;
+      final selectedWorkerId = workerIdFromPath != 0 ? workerIdFromPath : _selectWorkerId(path.path);
       _log.fine('createActor | worker $selectedWorkerId selected or referenced by path');
       final workerAdapter = _workerAdapters[selectedWorkerId];
       if (workerAdapter == null) {
@@ -219,6 +220,7 @@ class LocalNode extends Node {
         actorPath(path.path, system: systemName(workerAdapter.nodeId, workerAdapter.workerId)),
         mailboxSize,
       );
+      workerAdapter.actorPaths.add(result.path);
       _log.info('createActor > $result');
       return result;
     }
@@ -303,6 +305,7 @@ class LocalNode extends Node {
       }
       _log.fine('lookupActors | lookup on local node');
       result.addAll(await lookupActors(actorPath(path.path, system: systemName(nodeId, workerIdFromPath))));
+      result.sort((a, b) => a.path.toString().compareTo(b.path.toString()));
       _log.info('lookupActors > $result');
       return result;
     } else if (nodeIdFromPath != nodeId) {
@@ -335,6 +338,7 @@ class LocalNode extends Node {
           result.addAll(await workerAdapter.protocol
               .lookupActors(path.copyWith(system: systemName(nodeId, workerAdapter.workerId))));
         }
+        result.sort((a, b) => a.path.toString().compareTo(b.path.toString()));
         _log.info('lookupActors > $result');
         return result;
       }
@@ -353,7 +357,7 @@ class LocalNode extends Node {
 
     final nodeIdFromPath = getNodeId(path.host);
     final workerIdFromPath = getWorkerId(path.host);
-    final selectedNodeId = nodeIdFromPath.isNotEmpty ? nodeIdFromPath : _selectNodeId();
+    final selectedNodeId = nodeIdFromPath.isNotEmpty ? nodeIdFromPath : _selectNodeId(path.path);
 
     _log.fine(
         'handleCreateActor | nodeIdFromPath=$nodeIdFromPath, workerIdFromPath=$workerIdFromPath, selectedNode=$selectedNodeId');
@@ -386,8 +390,12 @@ class LocalNode extends Node {
       }
     } else {
       _log.fine('handleCreateActor | local node selected or referenced by path');
-      final selectedWorkerId = workerIdFromPath != 0 ? workerIdFromPath : Random().nextInt(_workerAdapters.length) + 1;
+      final selectedWorkerId = workerIdFromPath != 0 ? workerIdFromPath : _selectWorkerId(path.path);
       _log.fine('handleCreateActor | worker $selectedWorkerId selected or referenced by path');
+      if (selectedWorkerId == null) {
+        return CreateActorResponse(false, 'no worker found for path $path');
+      }
+
       final workerAdapter = _workerAdapters[selectedWorkerId];
       if (workerAdapter == null) {
         return CreateActorResponse(false, 'invalid worker id');
@@ -609,45 +617,56 @@ class LocalNode extends Node {
   void _handleNodeInfo(
     String nodeId,
     double load,
-    List<String> actorsAdded,
-    List<String> actorsRemoved,
+    List<Uri> actorsAdded,
+    List<Uri> actorsRemoved,
   ) {
     final remoteNode = _remoteNodes[nodeId];
     if (remoteNode != null) {
       remoteNode.load = load;
+      remoteNode.actorPaths.addAll(actorsAdded);
+      remoteNode.actorPaths.removeAll(actorsRemoved);
     }
   }
 
   void _handleWorkerInfo(
     int workerId,
     double load,
-    List<String> actorsAdded,
-    List<String> actorsRemoved,
+    List<Uri> actorsAdded,
+    List<Uri> actorsRemoved,
   ) {
     final adapter = _workerAdapters[workerId];
     if (adapter != null) {
       adapter.load = load;
+      adapter.actorPaths.addAll(actorsAdded);
+      adapter.actorPaths.removeAll(actorsRemoved);
+    }
+    if (actorsAdded.isNotEmpty || actorsRemoved.isNotEmpty) {
+      _publishNodeInfo(actorsAdded: actorsAdded, actorsRemoved: actorsRemoved);
     }
   }
 
-  void _publishNodeInfo(Timer timer) {
+  void _publishNodeInfo({List<Uri> actorsAdded = const [], List<Uri> actorsRemoved = const []}) {
     var load = 0.0;
     for (final workerAdapter in _workerAdapters.values) {
       load += workerAdapter.load;
     }
     for (final remoteNode in _remoteNodes.values) {
-      remoteNode.protocol.publishNodeInfo(nodeId, load, [], []);
+      remoteNode.protocol.publishNodeInfo(nodeId, load, actorsAdded, actorsRemoved);
     }
   }
 
-  String? _selectNodeId([String? tag]) {
+  String? _selectNodeId(String targetPath, [String? tag]) {
     _log.fine('selectNodeId < tag=$tag');
+
+    final nodeIdsWithFreePath = _nodeIdsWithFreePath(targetPath);
+
     final nodeIds = [
       if (tag == null || tag.isEmpty || tags.contains(tag)) nodeId,
       ..._remoteNodes.entries //
           .where((e) => tag == null || tag.isEmpty || e.value.tags.contains(tag))
           .map((e) => e.key),
-    ];
+    ].where((e) => nodeIdsWithFreePath.contains(e)).toList();
+
     if (nodeIds.isEmpty) {
       _log.fine('selectNodeId > null');
       return null;
@@ -689,6 +708,61 @@ class LocalNode extends Node {
       return result;
     }
   }
+
+  Set<String> _nodeIdsWithFreePath(String targetPath) {
+    final result = <String>{};
+
+    final workerIds = <String>{};
+    for (final workerAdapter in _workerAdapters.values) {
+      for (final actorPath in workerAdapter.actorPaths) {
+        if (actorPath.path == targetPath) {
+          workerIds.add(actorPath.host);
+        }
+      }
+    }
+    if (workerIds.length < _workerAdapters.length) {
+      result.add(nodeId);
+    }
+
+    for (final remoteNode in _remoteNodes.values) {
+      final workerIds = <String>{};
+      for (final actorPath in remoteNode.actorPaths) {
+        if (actorPath.path == targetPath) {
+          workerIds.add(actorPath.host);
+        }
+      }
+      if (workerIds.length < remoteNode.workers) {
+        result.add(remoteNode.nodeId);
+      }
+    }
+
+    return result;
+  }
+
+  int? _selectWorkerId(String targetPath) {
+    final workerIds = <int>{};
+    for (final workerAdapter in _workerAdapters.values) {
+      var free = true;
+      for (final existingPath in workerAdapter.actorPaths) {
+        if (existingPath.path == targetPath) {
+          free = false;
+          break;
+        }
+      }
+      if (free) {
+        workerIds.add(workerAdapter.workerId);
+      }
+    }
+    if (workerIds.isEmpty) {
+      return null;
+    }
+    if (workerIds.length == 1) {
+      return workerIds.first;
+    }
+
+    final randomIndex = Random().nextInt(workerIds.length);
+    return workerIds.toList()[randomIndex];
+  }
 }
 
 class RemoteNode extends Node {
@@ -697,6 +771,7 @@ class RemoteNode extends Node {
   final NodeToNodeProtocol protocol;
   final String host;
   final int port;
+  final Set<Uri> actorPaths = {};
   double load = 0.0;
 
   RemoteNode(
@@ -745,6 +820,7 @@ class _WorkerAdapter {
   final int workerId;
   final Isolate isolate;
   final NodeToWorkerProtocol protocol;
+  final Set<Uri> actorPaths = {};
   double load = 0.0;
 
   _WorkerAdapter(this.nodeId, this.workerId, this.isolate, this.protocol);

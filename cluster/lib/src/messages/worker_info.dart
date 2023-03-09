@@ -6,8 +6,8 @@ import 'package:msgpack_dart/msgpack_dart.dart';
 class WorkerInfo implements PackableData {
   final int workerId;
   final double load;
-  final List<String> actorsAdded;
-  final List<String> actorsRemoved;
+  final List<Uri> actorsAdded;
+  final List<Uri> actorsRemoved;
 
   WorkerInfo(this.workerId, this.load, this.actorsAdded, this.actorsRemoved);
 
@@ -16,8 +16,8 @@ class WorkerInfo implements PackableData {
     return WorkerInfo(
       deserializer.decode(),
       deserializer.decode(),
-      deserializer.decode().cast<String>(),
-      deserializer.decode().cast<String>(),
+      deserializer.decode().cast<String>().map(Uri.parse).toList(),
+      deserializer.decode().cast<String>().map(Uri.parse).toList(),
     );
   }
 
@@ -26,8 +26,8 @@ class WorkerInfo implements PackableData {
     final serializer = Serializer();
     serializer.encode(workerId);
     serializer.encode(load);
-    serializer.encode(actorsAdded);
-    serializer.encode(actorsRemoved);
+    serializer.encode(actorsAdded.map((e) => e.toString()));
+    serializer.encode(actorsRemoved.map((e) => e.toString()));
     return serializer.takeBytes();
   }
 

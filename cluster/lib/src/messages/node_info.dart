@@ -6,8 +6,8 @@ import 'package:msgpack_dart/msgpack_dart.dart';
 class NodeInfo implements PackableData {
   final String nodeId;
   final double load;
-  final List<String> actorsAdded;
-  final List<String> actorsRemoved;
+  final List<Uri> actorsAdded;
+  final List<Uri> actorsRemoved;
 
   NodeInfo(this.nodeId, this.load, this.actorsAdded, this.actorsRemoved);
 
@@ -16,8 +16,8 @@ class NodeInfo implements PackableData {
     return NodeInfo(
       deserializer.decode(),
       deserializer.decode(),
-      deserializer.decode().cast<String>(),
-      deserializer.decode().cast<String>(),
+      (deserializer.decode() as List).map((e) => Uri.parse(e.toString())).toList(),
+      (deserializer.decode() as List).map((e) => Uri.parse(e.toString())).toList(),
     );
   }
 
@@ -26,8 +26,8 @@ class NodeInfo implements PackableData {
     final serializer = Serializer();
     serializer.encode(nodeId);
     serializer.encode(load);
-    serializer.encode(actorsAdded);
-    serializer.encode(actorsRemoved);
+    serializer.encode(actorsAdded.map((e) => e.toString()));
+    serializer.encode(actorsRemoved.map((e) => e.toString()));
     return serializer.takeBytes();
   }
 

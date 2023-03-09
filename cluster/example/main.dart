@@ -73,20 +73,32 @@ void main(List<String> args) async {
           log.info('message: $msg');
         };
       });
+      addActorFactory(patternMatcher('/bar'), (path) {
+        return (ActorContext context, Object? msg) {
+          final log = Logger(context.current.path.toString());
+          log.info('message: $msg');
+        };
+      });
     },
     initNode: (CreateActor createActor, List<String> tags) async {
       final actor = await createActor(actorPath('/foo'), 1000);
       await actor.send('test message');
     },
     initCluster: (context) async {
-      // await context.createActor(actorPath('/foo', tag: 'foobar'), sendInit: true);
+      try {
+        await context.createActor(actorPath('/bar', tag: 'foobar'));
+        await context.createActor(actorPath('/bar', tag: 'foobar'));
+        await context.createActor(actorPath('/bar', tag: 'foobar'));
+      } catch (e) {
+        print(e);
+      }
 
       final actorRef1 = await context.createActor(Uri.parse('//node1/actor/1'));
       final actorRef2 = await context.createActor(Uri.parse('//node2/actor/2'));
       await context.createActor(Uri.parse('//node1/actor/3'));
       await actorRef1.send('hello cluster actor!', correlationId: '101', replyTo: actorRef2);
 
-      print(await context.lookupActors(actorPath('/foo')));
+      print(await context.lookupActors(actorPath('/')));
     },
   );
 }

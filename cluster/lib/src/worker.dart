@@ -146,15 +146,23 @@ class Worker {
   }
 
   Future<void> start() async {
-    actorSystem.externalCreateActor = _externalCreateActor;
-    actorSystem.externalLookupActor = _externalLookupActor;
-    actorSystem.externalLookupActors = _externalLookupActors;
-    await addActorFactories?.call(actorSystem.addActorFactory);
-
     Timer.periodic(Duration(seconds: 5), (timer) {
       final load = actorSystem.metrics.load;
       protocol.publishWorkerInfo(workerId, load, [], []);
     });
+    actorSystem.onActorAdded = (path) {
+      final load = actorSystem.metrics.load;
+      protocol.publishWorkerInfo(workerId, load, [path], []);
+    };
+    actorSystem.onActorRemoved = (path) {
+      final load = actorSystem.metrics.load;
+      protocol.publishWorkerInfo(workerId, load, [], [path]);
+    };
+
+    actorSystem.externalCreateActor = _externalCreateActor;
+    actorSystem.externalLookupActor = _externalLookupActor;
+    actorSystem.externalLookupActors = _externalLookupActors;
+    await addActorFactories?.call(actorSystem.addActorFactory);
   }
 }
 

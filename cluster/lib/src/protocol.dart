@@ -7,7 +7,7 @@ import 'package:actor_cluster/src/messages/lookup_actor.dart';
 import 'package:actor_cluster/src/messages/lookup_actors.dart';
 import 'package:actor_cluster/src/messages/node_info.dart';
 import 'package:actor_cluster/src/messages/send_message.dart';
-import 'package:actor_cluster/src/messages/system_info.dart';
+import 'package:actor_cluster/src/messages/worker_info.dart';
 import 'package:actor_cluster/src/ref_proxy.dart';
 import 'package:actor_cluster/src/ser_des.dart';
 import 'package:actor_system/actor_system.dart';
@@ -365,7 +365,7 @@ mixin ActorProtocolMixin on BaseProtocol {
 
 class NodeToNodeProtocol extends BaseProtocol with ActorProtocolMixin {
   final void Function(String nodeId) _handleClusterInitialized;
-  final void Function(String nodeId, double load, List<String> actorsAdded, List<String> actorsRemoved) _handleNodeInfo;
+  final void Function(String nodeId, double load, List<Uri> actorsAdded, List<Uri> actorsRemoved) _handleNodeInfo;
 
   NodeToNodeProtocol(
     super.id,
@@ -397,8 +397,8 @@ class NodeToNodeProtocol extends BaseProtocol with ActorProtocolMixin {
   Future<void> publishNodeInfo(
     String nodeId,
     double load,
-    List<String> actorsAdded,
-    List<String> actorsRemoved,
+    List<Uri> actorsAdded,
+    List<Uri> actorsRemoved,
   ) async {
     _channel.sink.add(ProtocolMessage(
       ProtocolMessageType.oneWay,
@@ -424,8 +424,7 @@ class NodeToNodeProtocol extends BaseProtocol with ActorProtocolMixin {
 }
 
 class NodeToWorkerProtocol extends BaseProtocol with ActorProtocolMixin {
-  final void Function(int workerId, double load, List<String> actorsAdded, List<String> actorsRemoved)
-      _handleWorkerInfo;
+  final void Function(int workerId, double load, List<Uri> actorsAdded, List<Uri> actorsRemoved) _handleWorkerInfo;
 
   NodeToWorkerProtocol(
     super.id,
@@ -469,8 +468,8 @@ class WorkerToNodeProtocol extends BaseProtocol with ActorProtocolMixin {
   Future<void> publishWorkerInfo(
     int workerId,
     double load,
-    List<String> actorsAdded,
-    List<String> actorsRemoved,
+    List<Uri> actorsAdded,
+    List<Uri> actorsRemoved,
   ) async {
     _channel.sink.add(ProtocolMessage(
       ProtocolMessageType.oneWay,

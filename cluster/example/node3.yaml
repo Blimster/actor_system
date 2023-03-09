@@ -2,7 +2,7 @@ node:
   host: "localhost"
   port: 8003
   id: node3
-workers: 1
+workers: 2
 tags:
   - bar
   - foobar
