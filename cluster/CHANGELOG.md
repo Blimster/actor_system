@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Library `actor_system` is exported by this library.
+
 ## 0.2.0
 
 - BREAKING CHANGE: based on version 0.7.2 of package `actor_system`.
