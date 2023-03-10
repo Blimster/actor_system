@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Library `actor_system_helper` is exported by this library.
+
 ## 0.2.1
 
 - Library `actor_system` is exported by this library.
