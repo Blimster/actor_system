@@ -18,7 +18,9 @@ import 'package:uuid/uuid.dart';
 
 /// Called after all seed nodes are up and connected. This
 /// callback is only called on the node elected as leader.
-typedef InitCluster = FutureOr<void> Function(ClusterContext context);
+typedef InitCluster = FutureOr<void> Function(
+  ClusterContext context,
+);
 
 /// Called after the node is up and all workers are started.
 /// The provided [createActor] function can only create actors
@@ -28,13 +30,26 @@ typedef InitNode = FutureOr<void> Function(
   List<String> tags,
 );
 
+/// Called after an isolate for a worker is created and before
+/// the actor system iscreated. Use this callback to initialize
+/// the worker isolate (e.g. for logging configuration).
+typedef InitWorkerIsolate = FutureOr<void> Function(
+  String nodeId,
+  int workderId,
+);
+
 /// To be called by the implementor of [AddActorFactories]
 /// to add factories.
-typedef AddActorFactory = void Function(PathMatcher pathMatcher, ActorFactory factory);
+typedef AddActorFactory = void Function(
+  PathMatcher pathMatcher,
+  ActorFactory factory,
+);
 
 /// Called to preprare the actor system of every worker of
 ///  a node. Use this callback to add actor factories.
-typedef AddActorFactories = FutureOr<void> Function(AddActorFactory addActorFactory);
+typedef AddActorFactories = FutureOr<void> Function(
+  AddActorFactory addActorFactory,
+);
 
 enum NodeState {
   created,
@@ -62,7 +77,7 @@ class ActorCluster {
   final ClusterConfig _clusterConfig;
   final NodeConfig _nodeConfig;
   final Level? _logLevel;
-  final void Function(LogRecord)? _onLogRecord;
+  final InitWorkerIsolate? _initWorkerIsolate;
   final Map<String, ConfigNode> _missingAdditionalNodes = {};
   late final LocalNode _localNode;
   InitNode? _initNode;
@@ -77,12 +92,12 @@ class ActorCluster {
     NodeConfig nodeConfig,
     SerDes serDes, {
     Level? logLevel,
-    void Function(LogRecord)? onLogRecord,
+    InitWorkerIsolate? initWorkerIsolate,
   })  : _clusterConfig = clusterConfig,
         _nodeConfig = nodeConfig,
         _serDes = serDes,
         _logLevel = logLevel,
-        _onLogRecord = onLogRecord;
+        _initWorkerIsolate = initWorkerIsolate;
 
   NodeState get state => _state;
 
@@ -504,7 +519,7 @@ class ActorCluster {
             _serDes,
             receivePort.sendPort,
             _logLevel,
-            _onLogRecord,
+            _initWorkerIsolate,
           ),
           debugName: '${_nodeConfig.node.id}_$workerId',
         );

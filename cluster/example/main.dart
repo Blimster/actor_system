@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:actor_cluster/actor_cluster.dart';
-import 'package:actor_system/actor_system.dart';
 import 'package:logging/logging.dart';
 
 class StringSerDes implements SerDes {
@@ -20,21 +19,21 @@ class StringSerDes implements SerDes {
   }
 }
 
-void log(LogRecord record) {
-  if (record.loggerName.startsWith('actor://')) {
-    print('${record.loggerName} ${record.level} ${record.message}');
-  }
+void initLogging() {
+  Logger.root.level = Level.ALL;
+  Logger.root.onRecord.listen((record) {
+    if (record.loggerName.startsWith('actor://')) {
+      print('${record.loggerName} ${record.level} ${record.message}');
+    }
+  });
 }
 
 void main(List<String> args) async {
-  Logger.root.level = Level.ALL;
-  Logger.root.onRecord.listen(log);
-
   final clusterNode = ActorCluster(
     await readClusterConfigFromYaml('example/cluster.yaml'),
     await readNodeConfigFromYaml('example/${args[0]}.yaml'),
     StringSerDes(),
-    onLogRecord: log,
+    initWorkerIsolate: (nodeId, workerId) => initLogging(),
   );
 
   await clusterNode.init(

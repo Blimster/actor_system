@@ -1,6 +1,6 @@
 name: actor_cluster
 description: Connects multiple actor systems into a cluster. Actor systems can run in different isolates and processes.
-version: 0.2.2
+version: 0.3.0
 homepage: https://www.github.com/blimster/actor_system
 
 environment:

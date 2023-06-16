@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- Removed parameter `onLogRecord` from the constructor of `ActorCluster`. Use the new parameter `initWorkerIsolate` instead.
+- Added parameter `initWorkerIsolate` to the constructor of `ActorCluster`. Use this callback to initialize the isolate of a worker.
+
 ## 0.2.2
 
 - Library `actor_system_helper` is exported by this library.

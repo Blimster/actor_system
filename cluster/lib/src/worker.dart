@@ -21,7 +21,7 @@ class WorkerBootstrapMsg {
   final SerDes serDes;
   final SendPort sendPort;
   final Level? logLevel;
-  final void Function(LogRecord)? onLogRecord;
+  final InitWorkerIsolate? initWorkerIsolate;
 
   WorkerBootstrapMsg(
     this.nodeId,
@@ -31,7 +31,7 @@ class WorkerBootstrapMsg {
     this.serDes,
     this.sendPort,
     this.logLevel,
-    this.onLogRecord,
+    this.initWorkerIsolate,
   );
 }
 
@@ -170,8 +170,10 @@ Future<void> bootstrapWorker(WorkerBootstrapMsg message) async {
   if (message.logLevel != null) {
     Logger.root.level = message.logLevel;
   }
-  if (message.onLogRecord != null) {
-    Logger.root.onRecord.listen(message.onLogRecord);
+
+  final initWorkerIsolate = message.initWorkerIsolate;
+  if (initWorkerIsolate != null) {
+    await initWorkerIsolate(message.nodeId, message.workerId);
   }
 
   final receivePort = ReceivePort('${message.nodeId}:${message.workerId}');
