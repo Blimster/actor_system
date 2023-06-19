@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:actor_system/src/system/actor.dart';
@@ -6,13 +7,14 @@ import 'package:actor_system/src/system/exceptions.dart';
 import 'package:actor_system/src/system/messages.dart';
 import 'package:logging/logging.dart';
 
+const _zoneActorKey = 'zone_actor';
+
 class ActorMessageEnvelope {
   final Object? message;
-  final ActorRef? sender;
   final ActorRef? replyTo;
   final String? correlationId;
 
-  ActorMessageEnvelope(this.message, this.sender, this.replyTo, this.correlationId);
+  ActorMessageEnvelope(this.message, this.replyTo, this.correlationId);
 }
 
 /// A reference to an actor. The only way to communicate with an actor is to
@@ -57,8 +59,8 @@ class ActorRef {
   /// thrown away and recreated using the factory provided
   /// when the actor was created. The messages in mailbox
   /// of the actor remain.
-  Future<void> send(Object? message, {ActorRef? sender, ActorRef? replyTo, String? correlationId}) async {
-    _log.info('send < message=${message?.runtimeType}, sender=$sender, replyTo=$replyTo, correlationId=$correlationId');
+  Future<void> send(Object? message, {ActorRef? replyTo, String? correlationId}) async {
+    _log.info('send < message=${message?.runtimeType}, replyTo=$replyTo, correlationId=$correlationId');
     if (_stopped) {
       throw ActorStopped();
     }
@@ -67,7 +69,7 @@ class ActorRef {
     }
 
     _log.fine('send | adding message at position ${_mailbox.length}');
-    _mailbox.addLast(ActorMessageEnvelope(message, sender, replyTo, correlationId));
+    _mailbox.addLast(ActorMessageEnvelope(message, replyTo, correlationId));
     _handleMessage();
 
     // message was added to mailbox
@@ -89,11 +91,15 @@ class ActorRef {
             _mailbox.clear();
             _onActorStopped(path.path);
           }
-          prepareContext(_context, this, envelope.sender, envelope.replyTo, envelope.correlationId);
+          final zoneActor = Zone.current[_zoneActorKey] as ActorRef?;
+          prepareContext(_context, this, zoneActor, envelope.replyTo, envelope.correlationId);
           _log.fine('handleMessage | calling actor with message of type ${envelope.message?.runtimeType}');
           final sw = Stopwatch();
           sw.start();
-          await _actor(_context, envelope.message);
+          runZoned(
+            () => _actor(_context, envelope.message),
+            zoneValues: {_zoneActorKey: _context.current},
+          );
           sw.stop();
           _onMessageProcessed(path, sw.elapsedMilliseconds, _mailbox.length);
           _log.fine('handleMessage | back from actor call');

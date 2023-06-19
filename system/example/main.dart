@@ -6,15 +6,16 @@ Actor actorFactory(Uri path) {
   int calls = 0;
 
   // a message handler that handles all messages for that actor
-  return (ActorContext context, Object? message) async {
+  return (ActorContext ctx, Object? msg) async {
     // count incoming messages
     calls++;
 
     // just print the received message
-    print("actor: ${context.current.path}, message: $message, correlationId: ${context.correlationId}, call: $calls");
+    print(
+        "actor: ${ctx.current.path}, sender: ${ctx.sender?.path} message: $msg, correlationId: ${ctx.correlationId}, call: $calls");
 
     // forward message to the replyTo actor
-    await context.replyTo?.send(message, correlationId: context.correlationId);
+    await ctx.replyTo?.send(msg, correlationId: ctx.correlationId);
   };
 }
 

@@ -131,10 +131,9 @@ void main() {
   });
 
   group('actor context', () {
-    test('sender, replyTo, correlationId and current is set', () async {
+    test('replyTo, correlationId and current is set', () async {
       final completer = Completer<List<String?>>();
 
-      final sender = await system.createActor(actorPath('/sender'), factory: (_) => (ctx, msg) => null);
       final replyTo = await system.createActor(actorPath('/replyTo'), factory: (_) => (ctx, msg) => null);
 
       final actorRef = await system.createActor(
@@ -148,9 +147,18 @@ void main() {
           ]);
         },
       );
-      await actorRef.send(
+      final sender = await system.createActor(
+        actorPath('/sender'),
+        factory: (_) => (ActorContext ctx, msg) {
+          actorRef.send(
+            'message',
+            replyTo: ctx.replyTo,
+            correlationId: ctx.correlationId,
+          );
+        },
+      );
+      await sender.send(
         'message',
-        sender: sender,
         replyTo: replyTo,
         correlationId: 'correlId',
       );

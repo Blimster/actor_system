@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0
+
+- BREAKING CHANGE: it is no longer possible to exclitly specifying a sender, when sending a message to an actor. Instead, it is implcitly set, if the message was sent in the context of an actor.
+
 ## 0.7.2
 
 - It is now possible to set callback function to be callled when an actors is added or removed from a system by using the setters `ActorSystem.onActorAdded` and `ActorSystem.onActorRemoved`.
