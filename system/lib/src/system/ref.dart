@@ -7,7 +7,8 @@ import 'package:actor_system/src/system/exceptions.dart';
 import 'package:actor_system/src/system/messages.dart';
 import 'package:logging/logging.dart';
 
-const _zoneActorKey = 'zone_actor';
+/// Use this constant as a key for a [Zone] value to set an actor as a sender.
+const zoneSenderKey = 'actor_system:sender';
 
 class ActorMessageEnvelope {
   final Object? message;
@@ -91,14 +92,14 @@ class ActorRef {
             _mailbox.clear();
             _onActorStopped(path.path);
           }
-          final zoneActor = Zone.current[_zoneActorKey] as ActorRef?;
+          final zoneActor = Zone.current[zoneSenderKey] as ActorRef?;
           prepareContext(_context, this, zoneActor, envelope.replyTo, envelope.correlationId);
           _log.fine('handleMessage | calling actor with message of type ${envelope.message?.runtimeType}');
           final sw = Stopwatch();
           sw.start();
           runZoned(
             () => _actor(_context, envelope.message),
-            zoneValues: {_zoneActorKey: _context.current},
+            zoneValues: {zoneSenderKey: _context.current},
           );
           sw.stop();
           _onMessageProcessed(path, sw.elapsedMilliseconds, _mailbox.length);

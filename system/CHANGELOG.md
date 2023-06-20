@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+
+- The key `zoneSenderKey` to set or get an actor as the sender in the current `Zone` is now public.
+
 ## 0.8.0
 
 - BREAKING CHANGE: it is no longer possible to exclitly specifying a sender, when sending a message to an actor. Instead, it is implcitly set, if the message was sent in the context of an actor.
