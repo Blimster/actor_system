@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+- BREAKING CHANGE: based on version 0.8.1 of package `actor_system`.
+
 ## 0.3.0
 
 - Removed parameter `onLogRecord` from the constructor of `ActorCluster`. Use the new parameter `initWorkerIsolate` instead.

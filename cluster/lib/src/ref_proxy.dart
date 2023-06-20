@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:actor_system/actor_system.dart';
 
 class ActorRefProxy implements ActorRef {
@@ -16,7 +18,8 @@ class ActorRefProxy implements ActorRef {
   Uri get path => _path;
 
   @override
-  Future<void> send(Object? message, {ActorRef? sender, ActorRef? replyTo, String? correlationId}) {
+  Future<void> send(Object? message, {ActorRef? replyTo, String? correlationId}) {
+    final sender = Zone.current[zoneSenderKey] as ActorRef?;
     return _send(_path, message, sender?.path, replyTo?.path, correlationId);
   }
 

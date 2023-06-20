@@ -101,7 +101,14 @@ class Worker {
       }
       final senderActor = sender != null ? await actorSystem.lookupActor(sender) : null;
       final replyToActor = replyTo != null ? await actorSystem.lookupActor(replyTo) : null;
-      await actorRef.send(message, sender: senderActor, replyTo: replyToActor, correlationId: correlationId);
+      runZoned(
+        () async {
+          await actorRef.send(message, replyTo: replyToActor, correlationId: correlationId);
+        },
+        zoneValues: {
+          zoneSenderKey: senderActor,
+        },
+      );
       return SendMessageResponse(SendMessageResult.success, '');
     } on MailboxFull catch (e) {
       return SendMessageResponse(SendMessageResult.mailboxFull, e.toString());
