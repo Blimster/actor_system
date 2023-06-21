@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Bugfix: node selection based on load could lead to select no node.
+
 ## 0.4.0
 
 - BREAKING CHANGE: based on version 0.8.1 of package `actor_system`.

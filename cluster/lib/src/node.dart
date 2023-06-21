@@ -696,9 +696,10 @@ class LocalNode extends Node {
       return result;
     } else {
       String? result;
-      var load = 1.0;
+      var load = double.maxFinite;
       for (final loadEntry in loads.entries) {
-        if (loadEntry.value < load) {
+        _log.fine('selectNodeId | checking load for node ${loadEntry.key} with load ${loadEntry.value}');
+        if (loadEntry.value <= load) {
           load = loadEntry.value;
           result = loadEntry.key;
         }
