@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+
+- Removed unintentional ```print()``` call.
+
 ## 0.4.2
 
 - `readClusterConfigFromYaml()` and `readNodeConfigFromYaml()` now have an additional parameter `keyHierarchy` to read the config from a subnode.

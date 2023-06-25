@@ -45,7 +45,6 @@ Future<ClusterConfig> readClusterConfigFromYaml(String filename, {List<String>? 
     if (node is YamlMap) {
       rootNode = node;
     } else {
-      print(node);
       throw ArgumentError('key hierarchy ${(keyHierarchy ?? []).join('.')} is not valid');
     }
   }
