@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2
+
+- `readClusterConfigFromYaml()` and `readNodeConfigFromYaml()` now have an additional parameter `keyHierarchy` to read the config from a subnode.
+
 ## 0.4.1
 
 - Bugfix: node selection based on load could lead to select no node.

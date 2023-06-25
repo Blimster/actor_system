@@ -35,43 +35,65 @@ class NodeConfig {
   NodeConfig(this.node, this.workers, this.tags);
 }
 
-Future<ClusterConfig> readClusterConfigFromYaml(String filename) async {
+Future<ClusterConfig> readClusterConfigFromYaml(String filename, {List<String>? keyHierarchy}) async {
   final yaml = await File(filename).readAsString();
   final YamlMap config = loadYaml(yaml);
 
+  var rootNode = config;
+  for (final key in keyHierarchy ?? []) {
+    final node = rootNode[key];
+    if (node is YamlMap) {
+      rootNode = node;
+    } else {
+      print(node);
+      throw ArgumentError('key hierarchy ${(keyHierarchy ?? []).join('.')} is not valid');
+    }
+  }
+
   final tags = <String, int>{};
-  if (config['tags'] != null) {
-    for (final tag in config['tags'].entries) {
+  if (rootNode['tags'] != null) {
+    for (final tag in rootNode['tags'].entries) {
       tags[tag.key] = tag.value;
     }
   }
 
   return ClusterConfig(
-    (config['nodes'] as YamlList).map((e) => ConfigNode(e['host'], e['port'], e['id'])).toList(),
+    (rootNode['nodes'] as YamlList).map((e) => ConfigNode(e['host'], e['port'], e['id'])).toList(),
     tags,
-    config['timeout'],
-    config['secret'],
+    rootNode['timeout'],
+    rootNode['secret'],
   );
 }
 
-Future<NodeConfig> readNodeConfigFromYaml(String filename) async {
+Future<NodeConfig> readNodeConfigFromYaml(String filename, {List<String>? keyHierarchy}) async {
   final yaml = await File(filename).readAsString();
   final YamlMap config = loadYaml(yaml);
 
+  var rootNode = config;
+  for (final key in keyHierarchy ?? []) {
+    final node = rootNode[key];
+    if (node is YamlMap) {
+      rootNode = node;
+    } else {
+      print(node);
+      throw ArgumentError('key hierarchy ${(keyHierarchy ?? []).join('.')} is not valid');
+    }
+  }
+
   final tags = <String>[];
-  if (config['tags'] != null) {
-    for (final tag in config['tags']) {
+  if (rootNode['tags'] != null) {
+    for (final tag in rootNode['tags']) {
       tags.add(tag);
     }
   }
 
   return NodeConfig(
     ConfigNode(
-      config['node']['host'],
-      config['node']['port'],
-      config['node']['id'],
+      rootNode['node']['host'],
+      rootNode['node']['port'],
+      rootNode['node']['id'],
     ),
-    config['workers'],
+    rootNode['workers'],
     tags,
   );
 }

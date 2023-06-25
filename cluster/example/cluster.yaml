@@ -1,12 +1,12 @@
-  nodes:
-    - host: "localhost"
-      port: 8001
-      id: node1
-    - host: "localhost"
-      port: 8002
-      id: node2
-  tags:
-    foo: 1
-    bar: 2
-  timeout: 60
-  secret: "s3cr3t"
+nodes:
+  - host: "localhost"
+    port: 8001
+    id: node1
+  - host: "localhost"
+    port: 8002
+    id: node2
+tags:
+  foo: 1
+  bar: 2
+timeout: 60
+secret: "s3cr3t"
