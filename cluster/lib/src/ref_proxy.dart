@@ -19,8 +19,9 @@ class ActorRefProxy implements ActorRef {
 
   @override
   Future<void> send(Object? message, {ActorRef? replyTo, String? correlationId}) {
+    final zoneCorrelationId = Zone.current[zoneCorrelationIdKey] as String?;
     final sender = Zone.current[zoneSenderKey] as ActorRef?;
-    return _send(_path, message, sender?.path, replyTo?.path, correlationId);
+    return _send(_path, message, sender?.path, replyTo?.path, correlationId ?? zoneCorrelationId);
   }
 
   @override

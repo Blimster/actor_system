@@ -45,7 +45,7 @@ void main(List<String> args) async {
           log.info('message: $msg');
           log.info('correlationId: ${context.correlationId}');
           log.info('replyTo: ${replyTo?.path}');
-          replyTo?.send(msg, correlationId: context.correlationId);
+          replyTo?.send(msg);
         };
       });
       addActorFactory(patternMatcher('/actor/2'), (path) {
@@ -55,7 +55,7 @@ void main(List<String> args) async {
           log.info('correlationId: ${context.correlationId}');
           log.info('sender: ${context.sender?.path}');
           final actorRef = await context.lookupActor(actorPath('/actor/3'));
-          actorRef?.send(msg, correlationId: context.correlationId);
+          actorRef?.send(msg);
         };
       });
       addActorFactory(patternMatcher('/actor/3'), (path) {

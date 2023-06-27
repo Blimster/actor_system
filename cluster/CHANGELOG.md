@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+
+- BREAKING CHANGE: based on version 0.9.0 of package `actor_system`.
+
 ## 0.4.3
 
 - Removed unintentional ```print()``` call.
