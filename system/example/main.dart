@@ -15,7 +15,7 @@ Actor actorFactory(Uri path) {
         "actor: ${ctx.current.path}, sender: ${ctx.sender?.path} message: $msg, correlationId: ${ctx.correlationId}, call: $calls");
 
     // forward message to the replyTo actor
-    await ctx.replyTo?.send(msg, correlationId: ctx.correlationId);
+    await ctx.replyTo?.send(msg);
   };
 }
 

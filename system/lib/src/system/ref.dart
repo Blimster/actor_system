@@ -10,6 +10,9 @@ import 'package:logging/logging.dart';
 /// Use this constant as a key for a [Zone] value to set an actor as a sender.
 const zoneSenderKey = 'actor_system:sender';
 
+/// Use this constant as a key for a [Zone] value to set a correlation id.
+const zoneCorrelationIdKey = 'actor_system:correlationId';
+
 class ActorMessageEnvelope {
   final Object? message;
   final ActorRef? replyTo;
@@ -93,13 +96,17 @@ class ActorRef {
             _onActorStopped(path.path);
           }
           final zoneActor = Zone.current[zoneSenderKey] as ActorRef?;
-          prepareContext(_context, this, zoneActor, envelope.replyTo, envelope.correlationId);
+          final zoneCorrelationId = Zone.current[zoneCorrelationIdKey] as String?;
+          prepareContext(_context, this, zoneActor, envelope.replyTo, envelope.correlationId ?? zoneCorrelationId);
           _log.fine('handleMessage | calling actor with message of type ${envelope.message?.runtimeType}');
           final sw = Stopwatch();
           sw.start();
           runZoned(
             () => _actor(_context, envelope.message),
-            zoneValues: {zoneSenderKey: _context.current},
+            zoneValues: {
+              zoneSenderKey: _context.current,
+              zoneCorrelationIdKey: _context.correlationId,
+            },
           );
           sw.stop();
           _onMessageProcessed(path, sw.elapsedMilliseconds, _mailbox.length);
