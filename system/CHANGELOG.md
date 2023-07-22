@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.1
+
+- Bugfix: "one message at a time" was not fulfilled for async message processing.
+
 ## 0.9.0
 
 - BREAKING CHANGE: if the `correlationId` is not explicitly set as parameter of `ActorRef.send()` it is implicitly set set from the context of the current actor (if available).

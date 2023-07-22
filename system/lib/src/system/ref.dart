@@ -101,7 +101,7 @@ class ActorRef {
           _log.fine('handleMessage | calling actor with message of type ${envelope.message?.runtimeType}');
           final sw = Stopwatch();
           sw.start();
-          runZoned(
+          await runZoned(
             () => _actor(_context, envelope.message),
             zoneValues: {
               zoneSenderKey: _context.current,
