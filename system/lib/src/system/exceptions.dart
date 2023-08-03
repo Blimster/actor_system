@@ -22,8 +22,9 @@ class MailboxFull extends MessageNotDelivered {
 /// Thrown by [ActorRef.send] if the message can't be added
 /// to actors mailbox because the actor is stopped.
 class ActorStopped extends MessageNotDelivered {
-  ActorStopped(Object actorPath, Object? msg, String? cause)
+  ActorStopped.detailed(Object actorPath, Object? msg, String? cause)
       : super('actor: $actorPath, message: ${msg.runtimeType}, cause: $cause');
+  ActorStopped(super.message);
 }
 
 /// Thrown by [BaseContext.createActor] if no factory was

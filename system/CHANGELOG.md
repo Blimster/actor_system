@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.4
+
+- `ActorStopped` exception can be constructed with a string again.
+
 ## 0.9.3
 
 - It is now possible to configure the defailt mailbox size for an actor system.
