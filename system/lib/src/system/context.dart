@@ -32,6 +32,7 @@ void prepareContext(
 abstract class BaseContext {
   final Logger _log;
   final String _name;
+  final int _defaultMailboxSize;
   final MissingHostHandling _missingHostHandling;
   final Map<String, ActorRef> _actorRefs;
   final List<MatcherAndFactory> _factories;
@@ -48,6 +49,7 @@ abstract class BaseContext {
 
   BaseContext._(
     this._name,
+    this._defaultMailboxSize,
     this._missingHostHandling,
     this._actorRefs,
     this._factories,
@@ -92,8 +94,6 @@ abstract class BaseContext {
       throw ArgumentError.value(mailboxSize, 'mailboxSize', 'must be greater than zero');
     }
 
-    final defaultMailboxSize = 1000;
-
     /// check if the actor must be created externally
     if (!_isLocalPath(path)) {
       _log.fine('createActor | path is an external path');
@@ -101,7 +101,7 @@ abstract class BaseContext {
       if (externalCreate != null) {
         final result = await externalCreate(
           path,
-          mailboxSize ?? defaultMailboxSize,
+          mailboxSize ?? _defaultMailboxSize,
         );
         if (sendInit) {
           await result.send(initMsg);
@@ -130,11 +130,12 @@ abstract class BaseContext {
     _log.fine('createActor | final path is $actorPath');
     final actorRef = createActorRef(
       actorPath,
-      mailboxSize ?? defaultMailboxSize,
+      mailboxSize ?? _defaultMailboxSize,
       await actorFactory(actorPath),
       actorFactory,
       ActorContext._(
         _name,
+        _defaultMailboxSize,
         _missingHostHandling,
         _actorRefs,
         _factories,
@@ -253,6 +254,7 @@ abstract class BaseContext {
 class ActorContext extends BaseContext {
   ActorContext._(
     String name,
+    int defaultMailboxSize,
     MissingHostHandling missingHostHandling,
     Map<String, ActorRef> actorRefs,
     List<MatcherAndFactory> factories,
@@ -264,6 +266,7 @@ class ActorContext extends BaseContext {
     MetricsImpl metrics,
   ) : super._(
           name,
+          defaultMailboxSize,
           missingHostHandling,
           actorRefs,
           factories,
@@ -310,9 +313,13 @@ typedef PathMatcher = bool Function(Uri path);
 /// other. An actor can only create or lookup actors in the same [ActorSystem].
 class ActorSystem extends BaseContext {
   /// Creates a new [ActorSystem].
-  ActorSystem({String name = localSystem, MissingHostHandling missingHostHandling = MissingHostHandling.asLocal})
-      : super._(
+  ActorSystem({
+    String name = localSystem,
+    int defaultMailboxSize = 1000,
+    MissingHostHandling missingHostHandling = MissingHostHandling.asLocal,
+  }) : super._(
           name.toLowerCase(),
+          defaultMailboxSize,
           missingHostHandling,
           {},
           [],

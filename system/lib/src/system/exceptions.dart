@@ -1,3 +1,5 @@
+import 'package:actor_system/src/system/ref.dart';
+
 /// If an actor throws an instance of this type while
 /// processing an message, the actor will not be restarted.
 class SkipMessage implements Exception {
@@ -20,7 +22,8 @@ class MailboxFull extends MessageNotDelivered {
 /// Thrown by [ActorRef.send] if the message can't be added
 /// to actors mailbox because the actor is stopped.
 class ActorStopped extends MessageNotDelivered {
-  const ActorStopped() : super('actor stopped');
+  ActorStopped(Object actorPath, Object? msg, String? cause)
+      : super('actor: $actorPath, message: ${msg.runtimeType}, cause: $cause');
 }
 
 /// Thrown by [BaseContext.createActor] if no factory was

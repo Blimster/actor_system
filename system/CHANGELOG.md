@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.3
+
+- It is now possible to configure the defailt mailbox size for an actor system.
+- `ActorStopped` exception contains information about the affected actor and message.
+
 ## 0.9.2
 
 - Bugfix: `sender` and `correlationId` from current context was determined in the wrong point of time. Thus, wrong values could be return from `ActorContext.sender` and `ActorContext.correlationId`.

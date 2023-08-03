@@ -67,7 +67,7 @@ class ActorRef {
   Future<void> send(Object? message, {ActorRef? replyTo, String? correlationId}) async {
     _log.info('send < message=${message?.runtimeType}, replyTo=$replyTo, correlationId=$correlationId');
     if (_stopped) {
-      throw ActorStopped();
+      throw ActorStopped(path, message, 'stopped');
     }
     if (_mailbox.length >= _maxMailBoxSize) {
       throw MailboxFull();
