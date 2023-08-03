@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3
+
+- Based on version 0.9.4 of package `actor_system`.
+- Information about of affected actor and message in `ActorStopped` exception.
+
+
 ## 0.5.2
 
 - Based on version 0.9.2 of package `actor_system`.

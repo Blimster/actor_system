@@ -97,7 +97,8 @@ class Worker {
     try {
       final actorRef = await actorSystem.lookupActor(path);
       if (actorRef == null) {
-        return SendMessageResponse(SendMessageResult.actorStopped, 'actor does not exists');
+        return SendMessageResponse(
+            SendMessageResult.actorStopped, ActorStopped.detailed(path, message, 'actor not found').message);
       }
       final senderActor = sender != null ? await actorSystem.lookupActor(sender) : null;
       final replyToActor = replyTo != null ? await actorSystem.lookupActor(replyTo) : null;

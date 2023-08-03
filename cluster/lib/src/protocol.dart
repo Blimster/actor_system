@@ -127,8 +127,7 @@ mixin ActorProtocolMixin on BaseProtocol {
       Uri? sender,
       Uri? replyTo,
       String? correlationId,
-    )
-        handleSendMessage,
+    ) handleSendMessage,
   ) {
     _handleCreateActor = handleCreateActor;
     _handleLookupActor = handleLookupActor;
@@ -351,7 +350,7 @@ mixin ActorProtocolMixin on BaseProtocol {
           pendingResponse.completer.complete(MailboxFull());
           break;
         case SendMessageResult.actorStopped:
-          pendingResponse.completer.complete(ActorStopped());
+          pendingResponse.completer.complete(ActorStopped(response.message));
           break;
         case SendMessageResult.messageNotDelivered:
         default:
