@@ -15,10 +15,11 @@ const zoneCorrelationIdKey = 'actor_system:correlationId';
 
 class ActorMessageEnvelope {
   final Object? message;
+  final ActorRef? sender;
   final ActorRef? replyTo;
   final String? correlationId;
 
-  ActorMessageEnvelope(this.message, this.replyTo, this.correlationId);
+  ActorMessageEnvelope(this.message, this.sender, this.replyTo, this.correlationId);
 }
 
 /// A reference to an actor. The only way to communicate with an actor is to
@@ -72,8 +73,12 @@ class ActorRef {
       throw MailboxFull();
     }
 
+    final zoneSender = Zone.current[zoneSenderKey] as ActorRef?;
+    final zoneCorrelationId = Zone.current[zoneCorrelationIdKey] as String?;
+    _log.fine('send | data from current zone: ${zoneSender?.path}, correlationId: $zoneCorrelationId');
+
     _log.fine('send | adding message at position ${_mailbox.length}');
-    _mailbox.addLast(ActorMessageEnvelope(message, replyTo, correlationId));
+    _mailbox.addLast(ActorMessageEnvelope(message, zoneSender, replyTo, correlationId ?? zoneCorrelationId));
     _handleMessage();
 
     // message was added to mailbox
@@ -95,9 +100,7 @@ class ActorRef {
             _mailbox.clear();
             _onActorStopped(path.path);
           }
-          final zoneActor = Zone.current[zoneSenderKey] as ActorRef?;
-          final zoneCorrelationId = Zone.current[zoneCorrelationIdKey] as String?;
-          prepareContext(_context, this, zoneActor, envelope.replyTo, envelope.correlationId ?? zoneCorrelationId);
+          prepareContext(_context, this, envelope.sender, envelope.replyTo, envelope.correlationId);
           _log.fine('handleMessage | calling actor with message of type ${envelope.message?.runtimeType}');
           final sw = Stopwatch();
           sw.start();

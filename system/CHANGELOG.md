@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.2
+
+- Bugfix: `sender` and `correlationId` from current context was determined in the wrong point of time. Thus, wrong values could be return from `ActorContext.sender` and `ActorContext.correlationId`.
+
 ## 0.9.1
 
 - Bugfix: "one message at a time" was not fulfilled for async message processing.
