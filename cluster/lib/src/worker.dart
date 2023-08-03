@@ -101,14 +101,7 @@ class Worker {
       }
       final senderActor = sender != null ? await actorSystem.lookupActor(sender) : null;
       final replyToActor = replyTo != null ? await actorSystem.lookupActor(replyTo) : null;
-      runZoned(
-        () async {
-          await actorRef.send(message, replyTo: replyToActor, correlationId: correlationId);
-        },
-        zoneValues: {
-          zoneSenderKey: senderActor,
-        },
-      );
+      await _runZonedIfRequired(actorRef, message, senderActor, replyToActor, correlationId);
       return SendMessageResponse(SendMessageResult.success, '');
     } on MailboxFull catch (e) {
       return SendMessageResponse(SendMessageResult.mailboxFull, e.toString());
@@ -116,6 +109,25 @@ class Worker {
       return SendMessageResponse(SendMessageResult.actorStopped, e.toString());
     } catch (e) {
       return SendMessageResponse(SendMessageResult.messageNotDelivered, e.toString());
+    }
+  }
+
+  Future<void> _runZonedIfRequired(
+    ActorRef actorRef,
+    Object? message,
+    ActorRef? senderActor,
+    ActorRef? replyToActor,
+    String? correlationId,
+  ) {
+    if (senderActor?.path != null && senderActor?.path.toString() != Zone.current[zoneSenderKey]?.path.toString()) {
+      return runZoned(
+        () => actorRef.send(message, replyTo: replyToActor, correlationId: correlationId),
+        zoneValues: {
+          zoneSenderKey: senderActor,
+        },
+      );
+    } else {
+      return actorRef.send(message, replyTo: replyToActor, correlationId: correlationId);
     }
   }
 
