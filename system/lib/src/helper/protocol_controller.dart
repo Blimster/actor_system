@@ -12,9 +12,13 @@ typedef ProtocolInit = FutureOr<void> Function(ActorContext ctx, String correlat
 /// A function to execute the next step of a protocol. The function should return `true` if the protocol is complete.
 typedef ProtocolOnMessage<M> = FutureOr<bool> Function(ActorContext ctx, M msg);
 
+///b A function to execute the final step of a protocol.
+typedef ProtocolDone = FutureOr<void> Function(ActorContext ctx);
+
 /// A protocol is a sequence of steps.
 class Protocol {
   ProtocolInit? _init;
+  ProtocolDone? _done;
   final _onMessage = <Type, dynamic>{};
 
   Protocol._();
@@ -47,7 +51,9 @@ class ProtocolBuilderMessage {
     return this;
   }
 
-  Protocol build() {
+  /// Builds the protocol. The `done` function is called when the protocol is complete.
+  Protocol build({ProtocolDone? done}) {
+    _protocol._done = done;
     return _protocol;
   }
 }
@@ -102,6 +108,7 @@ class ProtocolController {
     }
     final result = await onMessage(ctx, msg);
     if (result == true) {
+      await protocol._done?.call(ctx);
       _pendingProtocols.remove(correlationId);
     }
   }

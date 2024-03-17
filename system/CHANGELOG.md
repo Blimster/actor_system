@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.6
+
+- Add an optional parameter `done` to `ProtocolBuilderMessage.build`. `done` is called, when the protocol is completed.
+
+
 ## 0.9.5
 
 - Add `ProtocolController` to handle messages in context of a protocol.
