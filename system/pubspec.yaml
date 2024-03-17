@@ -1,6 +1,6 @@
 name: actor_system
 description: An implementation of the actor model in the Dart language. An actor processes only one message at a time, even if the processing is asynchronous.
-version: 0.9.4
+version: 0.9.5
 homepage: https://www.github.com/blimster/actor_system
 
 environment:
@@ -9,6 +9,7 @@ environment:
 dependencies:
     logging: ^1.0.0
     metrics: ^0.2.2
+    uuid: ^4.3.0
 
 dev_dependencies:
     test: ^1.6.8

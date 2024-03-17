@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.5
+
+- Add `ProtocolController` to handle messages in context of a protocol.
+
 ## 0.9.4
 
 - `ActorStopped` exception can be constructed with a string again.
