@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4
+
+- Based on version 0.9.5 of package `actor_system`.
+
 ## 0.5.3
 
 - Based on version 0.9.4 of package `actor_system`.
